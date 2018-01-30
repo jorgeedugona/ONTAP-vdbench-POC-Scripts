@@ -22,7 +22,7 @@ The script includes the following features:
 
 • Installation of POSH-SSH and PowerCLI 6.5 if needed. (NetApp PowerShell toolkit 4.5 needs to be installed manually).  
 • Creation of a new configuration file.  
-• Import of a existing configuration file.  
+• Import of an existing configuration file.  
 •	Creation of the SVM (e.g. vdbench_FCP/NFS/iSCSI) that is going to host all the volumes and VM workers for the performance test.  
 •	Creation of 4 NFS/iSCSI/FC data lifs (e.g 4 FC data lifs will be created for FC test).  
 •	Creation of a NFS/iSCSI/FCP Datastore in VMware that is going to host all the files of the Centos VM workers.  
