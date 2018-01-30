@@ -10,9 +10,9 @@ Please find below the prerequisites to run the script:
 
 •	Windows JumpHost.  
 •	Powershell 5.0 or above.
-•	Posh-SSH – If the jumpHost has internet access, the Script can install this as part of the prechecks.     
-•	PowerCLI 6.5 – If the jumpHost has internet access, the Script can install this as part of the prechecks.    
-•	NetApp Powershell toolkit 4.5.
+•	Posh-SSH – If the jumpHost has internet access, this script can install this as part of the prechecks.     
+•	PowerCLI 6.5 – If the jumpHost has internet access, the script can install this as part of the prechecks.    
+•	NetApp Powershell toolkit 4.5.  
 • zip file of the vdbench binaries (the binaries can be downloaded from the Oracle website, an account with Oracle is needed).   
 http://www.oracle.com/technetwork/server-storage/vdbench-downloads-1901681.html  
 
