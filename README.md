@@ -8,8 +8,8 @@ NetApp vdbench POSH POC Scripts
 
 Please find below the prerequisites to run the script:  
 
-•	Windows JumpHost.  
-•	Powershell 5.0 or above.
+•	Windows JumpHost.    
+•	Powershell 5.0 or above.  
 •	Posh-SSH – If the jumpHost has internet access, this script can install this as part of the prechecks.     
 •	PowerCLI 6.5 – If the jumpHost has internet access, the script can install this as part of the prechecks.    
 •	NetApp Powershell toolkit 4.5.  
