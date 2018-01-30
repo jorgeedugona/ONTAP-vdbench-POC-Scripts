@@ -2,7 +2,7 @@
 NetApp vdbench POSH POC Scripts  
 
 ### Main Menu Image
-<p align="center">
+<p align="left">
   <img src="https://github.com/jorgeedugona/POC-Scripts/blob/readme-edits/Images/MainMenu.JPG?raw=true" alt="Main Menu"/>
 </p>
 
