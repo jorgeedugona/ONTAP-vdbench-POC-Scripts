@@ -1,7 +1,10 @@
 # POC-Scripts  
 NetApp vdbench POSH POC Scripts  
 
-![Main Menu](https://github.com/jorgeedugona/POC-Scripts/blob/readme-edits/Images/MainMenu.JPG)
+### Main Menu Image
+<p align="center">
+  <img src="https://github.com/jorgeedugona/POC-Scripts/blob/readme-edits/Images/MainMenu.JPG?raw=true" alt="Main Menu"/>
+</p>
 
 Please find below the prerequisites to run the script:  
 
