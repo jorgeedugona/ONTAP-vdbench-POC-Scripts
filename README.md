@@ -15,6 +15,7 @@ The script is capable of deploying vdbench for FCP, iSCSI and NFS for Ontap 9.0 
 The script includes the following features:
 
 • Installation of POSH-SSH and PowerCLI 6.5 if needed. (NetApp PowerShell toolkit 4.5 needs to be installed manually).
+
 • Creation of a new configuration file.
 • Import of a existing configuration file. 
 •	Creation of the SVM (e.g. vdbench_FCP/NFS/iSCSI) that is going to host all the volumes and VM workers for the performance test.
