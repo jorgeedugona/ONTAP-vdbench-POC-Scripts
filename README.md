@@ -20,7 +20,7 @@ http://www.oracle.com/technetwork/server-storage/vdbench-downloads-1901681.html
 The OVA file can be found in the below link. I have added some examples of the config files for FCP,NFS and iSCSI for guidance. If you need further assistance let me know.  
 https://netapp-my.sharepoint.com/:u:/p/gjorge/EXMn4dlEzaxBrsUsKJvJE20BfzsSwDAzFnxmznROouu6Vg?e=N6lLj4  
 
-The script is capable of deploying vdbench for FCP, iSCSI and NFS for Ontap 9.0 platforms. After deployment the end user only needs to issue “vdbench -f <workload definitions>” to start the performance test (e.g vdbench -f ).  
+The script is capable of deploying vdbench for FCP, iSCSI and NFS for Ontap 9.0 platforms. After deployment the end user only needs to issue “vdbench -f <workload definitions>” to start the performance test (e.g vdbench -f 00-aff-basic-test-nfs).  
 The script includes the following features:  
 
 • Installation of POSH-SSH and PowerCLI 6.5 if needed. (NetApp PowerShell toolkit 4.5 needs to be installed manually).  
