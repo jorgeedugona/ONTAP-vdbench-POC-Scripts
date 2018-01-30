@@ -1,12 +1,17 @@
 # POC-Scripts  
-vdbench POSH POC Scripts  
+NetApp vdbench POSH POC Scripts  
+
+![Main Menu](https://github.com/jorgeedugona/POC-Scripts/blob/readme-edits/Images/MainMenu.JPG)
+
 Please find below the prerequisite to run the script:  
 
 •	Windows JumpHost.  
 •	Powershell 5.0 or above.
 •	Posh-SSH – If the jumpHost has internet access, the Script can install this as part of the prechecks.     
 •	PowerCLI 6.5 – If the jumpHost has internet access, the Script can install this as part of the prechecks.    
-•	NetApp Powershell toolkit 4.5.  
+•	NetApp Powershell toolkit 4.5.
+• zip vdbench binaries.
+
 
 The OVA file can be found in the below link. I have added some examples of the config files for FCP,NFS and iSCSI for guidance. If you need further assistance let me know.  
 https://netapp-my.sharepoint.com/:u:/p/gjorge/EXMn4dlEzaxBrsUsKJvJE20BfzsSwDAzFnxmznROouu6Vg?e=N6lLj4  
