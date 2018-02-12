@@ -978,10 +978,7 @@ $LunID = [int]$Global:config.Other.LunID
 
 Function Get-LunID {
 
-
-$ESXiCluster = $Global:config.Other.ESXiCluster
-
-$report = Get-Cluster -Name $ESXiCluster | Get-VMHost | %{
+$report = Get-VMHost | %{
     
     $esxcli = Get-EsxCli -VMHost $_
     foreach($Hostserver in $Global:config.Hosts.GetEnumerator()){
