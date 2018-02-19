@@ -1579,7 +1579,11 @@ Function Adding-DNS2{
             $IP = $item.Value.IP
             $VMName = $item.Value.Name
             $DNSLINE = "echo '$IP $VMName' >> /etc/hosts"
+            $StartNTPServices = "systemctl start ntpd"
+            $EnableNTPServices = "systemctl enable ntpd"
             Invoke-SSHCommand -Index 0 -Command $DNSLINE | Out-Null
+            Invoke-SSHCommand -Index 0 -Command $StartNTPServices | Out-Null
+            Invoke-SSHCommand -Index 0 -Command $EnableNTPServices | Out-Null
             
             }
 
