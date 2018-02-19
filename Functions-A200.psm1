@@ -1445,7 +1445,7 @@ Remove-OSCustomizationSpec -OSCustomizationSpec "$SVM_NAME*" -Confirm:$false | O
 
 ForEach($item in $Global:config.VMs.GetEnumerator() | Sort Key){
 
-$NewSpec = New-OSCustomizationSpec –Name $item.Value.Name –Domain vdbench –DnsServer "10.0.0.1" –NamingScheme VM –OSType Linux
+$NewSpec = New-OSCustomizationSpec –Name $item.Value.Name –Domain vdbench –DnsServer "8.8.8.8" –NamingScheme VM –OSType Linux
 Get-OSCustomizationSpec $item.Value.Name | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping -IpMode UseStaticIp -IpAddress $item.Value.IP -SubnetMask $Global:config.VMs.VM00.Netmask -DefaultGateway $Global:config.VMs.VM00.Gateway | Out-Null
 
 }
