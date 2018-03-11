@@ -50,8 +50,14 @@ Write-Host "Creation of the Data LIFS......" -ForegroundColor Green
 DataLifsSVM($SVM_Prexis)
 
 Write-Host "Creation of the NFS DataStore..... " -ForegroundColor Green
+########################################
+#This function can only be run one time.
+########################################
+########################################
+########################################
+########################################
 
-#This function can only be run one time. 
+ 
 $DataStores = Get-Datastore
 
 if($DataStores.Name -notcontains $Global:config.VMsLIF.lif0.Name){
