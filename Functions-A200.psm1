@@ -50,13 +50,8 @@ Write-Host "Creation of the Data LIFS......" -ForegroundColor Green
 DataLifsSVM($SVM_Prexis)
 
 Write-Host "Creation of the NFS DataStore..... " -ForegroundColor Green
-########################################
-#This function can only be run one time.
-########################################
-########################################
-########################################
-########################################
 
+#This function can only be run one time.
  
 $DataStores = Get-Datastore
 
@@ -3074,6 +3069,9 @@ $Global | ConvertTo-JSON | Set-Content -Path $SaveFileDialog.filename
 
 $ImportConfigFileButton.Add_Click({
 
+$SVMConfigurationExpander.IsExpanded = $false
+$VMWareConfigurationExpander.IsExpanded = $false
+$SVMConfigurationExpander.RenderTransform = New-Object System.Windows.Media.TranslateTransform -ArgumentList 0,0
 
 $InputConfigFile = Get-FileName ".\" ps1
 
@@ -3213,18 +3211,6 @@ $VMExpanderGrid.AddChild((Get-Variable -Name $VariableTextBox -ValueOnly))
 $VMExpanderGrid.AddChild((Get-Variable -Name $VariableLabel -ValueOnly))
 (Get-Variable -Name $VariableLabel -ValueOnly).RenderTransform = New-Object System.Windows.Media.TranslateTransform -ArgumentList 81,$Top
 
-$ESXiServersExpander.IsExpanded = $True
-
-if($ESXiServersExpander.IsExpanded){
-
-$SVMConfigurationExpander.RenderTransform = New-Object System.Windows.Media.TranslateTransform -ArgumentList 0,($Global:SVM_Y + 250 + 40*($Global:HostCounter-1))
-
-}elseif(!$ESXiServersExpander.IsExpanded){
-
-$SVMConfigurationExpander.RenderTransform = New-Object System.Windows.Media.TranslateTransform -ArgumentList 0,($Global:SVM_Y + 100)
-
-}
-
 }
 
 
@@ -3274,21 +3260,7 @@ $ESXiServerExpanderGrid.AddChild((Get-Variable -Name $VariableTextBox -ValueOnly
 $ESXiServerExpanderGrid.AddChild((Get-Variable -Name $VariableLabel -ValueOnly))
 (Get-Variable -Name $VariableLabel -ValueOnly).RenderTransform = New-Object System.Windows.Media.TranslateTransform -ArgumentList 81,$Top
 
-$VMExpander.RenderTransform = New-Object System.Windows.Media.TranslateTransform -ArgumentList 0,$Global:VM_Y
-$VMExpander.IsExpanded = $True
-
-
-if($VMExpander.IsExpanded){
-
-$SVMConfigurationExpander.RenderTransform = New-Object System.Windows.Media.TranslateTransform -ArgumentList 0,($Global:SVM_Y + 250 + 40*($Global:VMCounter-1))
-
-}elseif(!$VMExpander.IsExpanded){
-
-$SVMConfigurationExpander.RenderTransform = New-Object System.Windows.Media.TranslateTransform -ArgumentList 0,$Global:SVM_Y
-
-}
-
-
+$VMExpander.RenderTransform = New-Object System.Windows.Media.TranslateTransform -ArgumentList 0,0
 
 }
 
