@@ -891,6 +891,7 @@ $LunID = [int]$Global:config.Other.LunID
 
     Write-Host "Creating $SVM_Prexis LUN $DataStoreName in aggregate $AggrName -Size 150GB" -ForegroundColor Green
     New-NcVol -Name $DataStoreName -Aggregate $AggrName -Size 150GB -JunctionPath $Null -State "online" -VserverContext "$SVM_NAME" -SnapshotPolicy 'none' -SnapshotReserve 0 | Out-Null
+    Get-NcVol -Name $DataStoreName | Set-NcVolOption -Key guarantee -Value none
     New-NcLun -Path $Path -Size 140GB -OsType 'vmware' -VserverContext $SVM_NAME | Out-Null
 
   
@@ -1072,7 +1073,8 @@ $LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreNa
                 Update-NcVol -Query $query -Attributes $attr -FlexGroupVolume:$false | Out-Null
                 #
                 $JunctionPath = "/"+$DataStoreName
-                New-NcVol -Name $DataStoreName -Aggregate $DataAggr[0].Name -Size 100GB -JunctionPath $JunctionPath -ExportPolicy "$SVM_NAME" -SecurityStyle "Unix" -UnixPermissions "0777" -State "online" -VserverContext "$SVM_NAME" | Out-Null
+                New-NcVol -Name $DataStoreName -Aggregate $DataAggr[0].Name -Size 150GB -JunctionPath $JunctionPath -ExportPolicy "$SVM_NAME" -SecurityStyle "Unix" -UnixPermissions "0777" -State "online" -VserverContext "$SVM_NAME" | Out-Null
+                Get-NcVol -Name $DataStoreName | Set-NcVolOption -Key guarantee -Value none        
                         ForEach($item in $Global:config.Hosts.GetEnumerator()){
                         $VMHostName = $item.Value.Name
 
