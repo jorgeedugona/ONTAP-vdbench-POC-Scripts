@@ -262,8 +262,6 @@ Import-ConfigFile $Global:ConfigFile
 Write-Warning "There was no file selected..."
 }
 
-
-
 })
 
 

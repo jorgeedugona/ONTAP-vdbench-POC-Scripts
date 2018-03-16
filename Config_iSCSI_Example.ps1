@@ -32,7 +32,7 @@
     "Other":  {
                   "iSCSI":  true,
                   "PortGroupName":  "",
-                  "ESXiCluster":  "cov-nacho",
+                  "NumberofVolumesPerVM":  "4",
                   "FileSize":  "",
                   "NetworkName":  "Public",
                   "Pathvdbench":  "C:\\Users\\Administrator\\Desktop\\vdbench50406.zip",

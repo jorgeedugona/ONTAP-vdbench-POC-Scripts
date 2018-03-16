@@ -336,9 +336,9 @@ $Global:config = @{}
 
 $Global:config.Other = @{}
 
-$Global:config.Other.Add('ESXiCluster',$GlobalObject.Other.ESXiCluster.Trim())
 $Global:config.Other.Add('VCenterIP',$GlobalObject.Other.VCenterIP.Trim())
 $Global:config.Other.Add('ClusterIP',$GlobalObject.Other.ClusterIP.Trim())
+$Global:config.Other.Add('NumberofVolumesPerVM',$GlobalObject.Other.NumberofVolumesPerVM.Trim())
 
 $Numberperhost = $GlobalObject.Other.NumberVMperhost.Trim()
 
@@ -545,7 +545,7 @@ Write-Host "iSCSI is used                     : " $Global:config.Other.iSCSI -Fo
 Write-Host "LUN ID                            : " $Global:config.Other.LunID -ForegroundColor Green
 Write-Host "NFS is used                       : " $Global:config.Other.NFS -ForegroundColor Green
 Write-Host "FCP is used                       : " $Global:config.Other.FC -ForegroundColor Green
-Write-Host "ESXi Cluster Name                 : " $Global:config.Other.ESXiCluster -ForegroundColor Green
+Write-Host "Number of Volumes per VM          : " $Global:config.Other.NumberofVolumesPerVM -ForegroundColor Green
 Write-Host "VCenter IP Address                : " $Global:config.Other.VCenterIP -ForegroundColor Green
 Write-Host "Cluster IP Address                : " $Global:config.Other.ClusterIP -ForegroundColor Green
 if($Global:config.Other.DSwitch){
@@ -1235,11 +1235,19 @@ Write-Host "==========================================================" -Foregro
 Write-Host "                   Creation of NFS Volumes                " -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host ""
+#Converting string to Int32
+$strNumberofVolumesPerVM = $Global:config.Other.NumberofVolumesPerVM
+$BooleanValue = $strNumberofVolumesPerVM -match "^[0-9]{1,4}"
+$HasValue = $Matches
+$StrValue = $HasValue.Values
+[int]$NumberofVolumesPerVM = [convert]::ToInt32($StrValue, 10)
+
+
 $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
-    Write-Host "4 $SVM_Prexis Volumes per VM will be created, and the distribution " -ForegroundColor Green
+    Write-Host "$NumberofVolumesPerVM $SVM_Prexis Volumes per VM will be created, and the distribution " -ForegroundColor Green
     Write-Host "will be acrossed TWO Data Aggregates " -ForegroundColor Green
     Write-host "Number of vdbench VMs " $Global:config.VMs.Count -ForegroundColor Green
-    $NumberofVolumesPerVM = 4
+    $NumberofVolumesPerVM = $Global:config.Other.NumberofVolumesPerVM
     $VolumeSize = $Global:config.Other.VolumeSize
     $VMCount = $Global:config.VMs.Count
     $numberVOLS = $VMCount*$NumberofVolumesPerVM
@@ -1323,12 +1331,18 @@ Write-Host "==========================================================" -Foregro
 Write-Host "               Creation of $SVM_Prexis LUNs               " -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host ""
+#Converting string to Int32
+$strNumberofVolumesPerVM = $Global:config.Other.NumberofVolumesPerVM
+$BooleanValue = $strNumberofVolumesPerVM -match "^[0-9]{1,4}"
+$HasValue = $Matches
+$StrValue = $HasValue.Values
+[int]$NumberofVolumesPerVM = [convert]::ToInt32($StrValue, 10)
 
 $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
-    Write-Host "4 $SVM_Prexis LUNs per VM will be created, and the distribution " -ForegroundColor Green
+    Write-Host "$NumberofVolumesPerVM $SVM_Prexis LUNs per VM will be created, and the distribution " -ForegroundColor Green
     Write-Host "will be acrossed TWO Data Aggregates " -ForegroundColor Green
     Write-host "Number of vdbench VMs " $Global:config.VMs.Count -ForegroundColor Green
-    $NumberofVolumesPerVM = 4
+    
     $VolumeSize = $Global:config.Other.VolumeSize
     $BooleanValue = $VolumeSize -match "^[0-9]{1,4}"
     $HasValue = $Matches
@@ -1407,8 +1421,15 @@ foreach($vdbenchVMs in $Global:config.VMs.GetEnumerator()){
 
     $VM = $vdbenchVMs.Value.Name
     $VMObject = Get-VM $VM 
-    #Number of volumes is 4
-    for($i=0; $i -lt 4; $i++){
+    #Number of volumes per VM
+    #Converting string to Int32
+    $strNumberofVolumesPerVM = $Global:config.Other.NumberofVolumesPerVM
+    $BooleanValue = $strNumberofVolumesPerVM -match "^[0-9]{1,4}"
+    $HasValue = $Matches
+    $StrValue = $HasValue.Values
+    [int]$NumberofVolumesPerVM = [convert]::ToInt32($StrValue, 10)
+
+    for($i=0; $i -lt $NumberofVolumesPerVM ; $i++){
     
         $HostServer = $Global:config.Hosts.Host00.Name
         $LunString = $LunID.ToString()
@@ -1566,26 +1587,59 @@ Function Mounting-NFSVolumes2($VMName){
 
  $SVM_NAME = $Global:config.SVM.Name+"NFS"
 
- $NFSVolumes = Get-NcVol -Vserver $SVM_NAME -Name "$VMName*"
- $Location = 0
+ $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
+ $NFSVolumes1 = Get-NcVol -Vserver $SVM_NAME -Name "$VMName*" -Aggregate $DataAggr[0]
+ $NFSVolumes2 = Get-NcVol -Vserver $SVM_NAME -Name "$VMName*" -Aggregate $DataAggr[1]
  
-     ForEach($item in $Global:config.LIFSNFS.GetEnumerator() | Sort Key){
-                    
-                    $NFSvol  = $NFSVolumes[$Location].Name
-                    $DATALIF = $item.value.IP
-                    $PermanentMount = "echo '$DATALIF`:/$NFSvol /mnt/$NFSvol nfs defaults        0 0' >> /etc/fstab"
-                    $Mount = "mount -t nfs $DATALIF`:/$NFSvol /mnt/$NFSvol"
-                    $Folder = "mkdir /mnt/$NFSvol"
-                    #1. Creating the Folders Command
-                    Invoke-SSHCommand -Index 0 -Command $Folder | Out-Null
-                    #2. adding the Permanent NFS mounting point
-                    Invoke-SSHCommand -Index 0 -Command $PermanentMount | Out-Null
-                    #3. Mounting the NFS vol
-                    Invoke-SSHCommand -Index 0 -Command $Mount | Out-Null
-                                   
-            $Location++
-           }         
-                
+ $NFSLIF1 = $Global:config.LIFSNFS.lif1.IP
+ $NFSLIF2 = $Global:config.LIFSNFS.lif2.IP
+
+ $NFSLIF3 = $Global:config.LIFSNFS.lif3.IP
+ $NFSLIF4 = $Global:config.LIFSNFS.lif4.IP
+
+ $Location = 0
+ foreach($NFSvol in $NFSVolumes1.Name){
+ $Location++
+        if($Location -eq 1){
+        $DATALIF = $NFSLIF1
+        }elseif($Location -eq 2){
+        $DATALIF = $NFSLIF2
+        $Location = 0
+        }
+        $PermanentMount = "echo '$DATALIF`:/$NFSvol /mnt/$NFSvol nfs defaults        0 0' >> /etc/fstab"
+        $Mount = "mount -t nfs $DATALIF`:/$NFSvol /mnt/$NFSvol"
+        $Folder = "mkdir /mnt/$NFSvol"
+        #1. Creating the Folders Command
+        Invoke-SSHCommand -Index 0 -Command $Folder | Out-Null
+        #2. adding the Permanent NFS mounting point
+        Invoke-SSHCommand -Index 0 -Command $PermanentMount | Out-Null
+        #3. Mounting the NFS vol
+        Invoke-SSHCommand -Index 0 -Command $Mount | Out-Null
+ }
+
+ $Location = 0
+ foreach($NFSVol in $NFSVolumes2){
+ $Location++
+        if($Location -eq 1){
+        $DATALIF = $NFSLIF3
+        }elseif($Location -eq 2){
+        $DATALIF = $NFSLIF4
+        $Location = 0
+        }
+        $PermanentMount = "echo '$DATALIF`:/$NFSvol /mnt/$NFSvol nfs defaults        0 0' >> /etc/fstab"
+        $Mount = "mount -t nfs $DATALIF`:/$NFSvol /mnt/$NFSvol"
+        $Folder = "mkdir /mnt/$NFSvol"
+        #1. Creating the Folders Command
+        Invoke-SSHCommand -Index 0 -Command $Folder | Out-Null
+        #2. adding the Permanent NFS mounting point
+        Invoke-SSHCommand -Index 0 -Command $PermanentMount | Out-Null
+        #3. Mounting the NFS vol
+        Invoke-SSHCommand -Index 0 -Command $Mount | Out-Null
+
+ 
+ 
+ }
+                   
  }
 
 Function Adding-DNS2{
@@ -1769,7 +1823,13 @@ $SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
 }
 
 Function vdbench-Files2($SVM_Prexis){
-
+        
+        #Converting string to Int32
+        $strNumberofVolumesPerVM = $Global:config.Other.NumberofVolumesPerVM
+        $BooleanValue = $strNumberofVolumesPerVM -match "^[0-9]{1,4}"
+        $HasValue = $Matches
+        $StrValue = $HasValue.Values
+        [int]$NumberofVolumesPerVM = [convert]::ToInt32($StrValue, 10)
         
         $secpasswd = ConvertTo-SecureString "Netapp1!" -AsPlainText -Force
         $mycreds = New-Object System.Management.Automation.PSCredential ("root", $secpasswd)
@@ -1856,24 +1916,16 @@ Function vdbench-Files2($SVM_Prexis){
                 #sd=sd1-2,host=slave01,lun=/mnt/vdbench_NFS00_NFS_VD_vol2/file1-*,openflags=o_direct
                 #sd=sd1-3,host=slave01,lun=/mnt/vdbench_NFS00_NFS_VD_vol3/file1-*,openflags=o_direct
                 #sd=sd1-4,host=slave01,lun=/mnt/vdbench_NFS00_NFS_VD_vol4/file1-*,openflags=o_direct
+           
+                for($i=1; $i -lt ($NumberofVolumesPerVM+1); $i++){
+                $VolumeLine = "sd=sd$SlaveNumber-$i,host=slave0$SlaveNumber,lun=/mnt/$VMName`_NFS_VD_vol_$i/file1-*,openflags=o_direct"
+                $VolumeLine = "echo '$VolumeLine' >> /root/SharedFiles/vdbench/nfs/aff-luns-nfs"
+                Invoke-SSHCommand -Index 0 -Command $VolumeLine | Out-Null
+                }
                 
-                $VolumeLine1 = "sd=sd$SlaveNumber-1,host=slave0$SlaveNumber,lun=/mnt/$VMName`_NFS_VD_vol_1/file1-*,openflags=o_direct"
-                $VolumeLine2 = "sd=sd$SlaveNumber-2,host=slave0$SlaveNumber,lun=/mnt/$VMName`_NFS_VD_vol_2/file1-*,openflags=o_direct"
-                $VolumeLine3 = "sd=sd$SlaveNumber-3,host=slave0$SlaveNumber,lun=/mnt/$VMName`_NFS_VD_vol_3/file1-*,openflags=o_direct"
-                $VolumeLine4 = "sd=sd$SlaveNumber-4,host=slave0$SlaveNumber,lun=/mnt/$VMName`_NFS_VD_vol_4/file1-*,openflags=o_direct"
-                $VolumeLine5 = "      "    
-
+                $VolumeLine1 = "      "
                 $VolumeLine1 = "echo '$VolumeLine1' >> /root/SharedFiles/vdbench/nfs/aff-luns-nfs"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine1 | Out-Null
-                $VolumeLine2 = "echo '$VolumeLine2' >> /root/SharedFiles/vdbench/nfs/aff-luns-nfs"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine2 | Out-Null
-                $VolumeLine3 = "echo '$VolumeLine3' >> /root/SharedFiles/vdbench/nfs/aff-luns-nfs"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine3 | Out-Null
-                $VolumeLine4 = "echo '$VolumeLine4' >> /root/SharedFiles/vdbench/nfs/aff-luns-nfs"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine4 | Out-Null
-                $VolumeLine5 = "echo '$VolumeLine5' >> /root/SharedFiles/vdbench/nfs/aff-luns-nfs"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine5 | Out-Null
-                                            
+                Invoke-SSHCommand -Index 0 -Command $VolumeLine1 | Out-Null                           
                 $SlaveNumber++
                 Remove-SSHSession -SessionId 0 | Out-Null
                 
@@ -1889,26 +1941,22 @@ Function vdbench-Files2($SVM_Prexis){
                 #Adding the new Lines at /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk
                 #sd=sd1-1,host=slave01,lun=/dev/sdb,openflags=o_direct,offset=0
                 #sd=sd1-2,host=slave01,lun=/dev/sdc,openflags=o_direct,offset=0
-                #sd=sd1-1,host=slave01,lun=/dev/sdd,openflags=o_direct,offset=0
-                #sd=sd1-2,host=slave01,lun=/dev/sde,openflags=o_direct,offset=0
-                
-                $VolumeLine1 = "sd=sd$SlaveNumber-1,host=slave0$SlaveNumber,lun=/dev/sdb,openflags=o_direct,offset=0"
-                $VolumeLine2 = "sd=sd$SlaveNumber-2,host=slave0$SlaveNumber,lun=/dev/sdc,openflags=o_direct,offset=0"
-                $VolumeLine3 = "sd=sd$SlaveNumber-3,host=slave0$SlaveNumber,lun=/dev/sdd,openflags=o_direct,offset=0"
-                $VolumeLine4 = "sd=sd$SlaveNumber-4,host=slave0$SlaveNumber,lun=/dev/sde,openflags=o_direct,offset=0"
-                $VolumeLine5 = "      "    
+                #sd=sd1-3,host=slave01,lun=/dev/sdd,openflags=o_direct,offset=0
+                #sd=sd1-4,host=slave01,lun=/dev/sde,openflags=o_direct,offset=0
+                                
+                $letters = [char[]]('b'[0]..'z'[0])
+                for($i=1; $i -lt ($NumberofVolumesPerVM+1); $i++){
+                $letters1 = $letters[($i-1)]
+                $VolumeLine = "sd=sd$SlaveNumber-$i,host=slave0$SlaveNumber,lun=/dev/sd$letters1,openflags=o_direct,offset=0"
+                $VolumeLine = "echo '$VolumeLine' >> /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"
+                Invoke-SSHCommand -Index 0 -Command $VolumeLine | Out-Null
 
+                }
+                
+                $VolumeLine1 = "      "
                 $VolumeLine1 = "echo '$VolumeLine1' >> /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"
                 Invoke-SSHCommand -Index 0 -Command $VolumeLine1 | Out-Null
-                $VolumeLine2 = "echo '$VolumeLine2' >> /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine2 | Out-Null
-                $VolumeLine3 = "echo '$VolumeLine3' >> /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine3 | Out-Null
-                $VolumeLine4 = "echo '$VolumeLine4' >> /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine4 | Out-Null
-                $VolumeLine5 = "echo '$VolumeLine5' >> /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine5 | Out-Null
-                                            
+                            
                 $SlaveNumber++
                 Remove-SSHSession -SessionId 0 | Out-Null
                 
@@ -1928,29 +1976,23 @@ Function vdbench-Files2($SVM_Prexis){
                 #sd=sd1-1,host=slave01,lun=/dev/sdd,openflags=o_direct,offset=0
                 #sd=sd1-2,host=slave01,lun=/dev/sde,openflags=o_direct,offset=0
                 
-                $VolumeLine1 = "sd=sd$SlaveNumber-1,host=slave0$SlaveNumber,lun=/dev/sdb,openflags=o_direct,offset=0"
-                $VolumeLine2 = "sd=sd$SlaveNumber-2,host=slave0$SlaveNumber,lun=/dev/sdc,openflags=o_direct,offset=0"
-                $VolumeLine3 = "sd=sd$SlaveNumber-3,host=slave0$SlaveNumber,lun=/dev/sdd,openflags=o_direct,offset=0"
-                $VolumeLine4 = "sd=sd$SlaveNumber-4,host=slave0$SlaveNumber,lun=/dev/sde,openflags=o_direct,offset=0"
-                $VolumeLine5 = "      "    
+                $letters = [char[]]('b'[0]..'z'[0]) 
+                for($i=1; $i -lt ($NumberofVolumesPerVM+1); $i++){
+                $letters1 = $letters[$i]
+                $VolumeLine = "sd=sd$SlaveNumber-$i,host=slave0$SlaveNumber,lun=/dev/sd$letters1,openflags=o_direct,offset=0"
+                $VolumeLine = "echo '$VolumeLine' >> /root/SharedFiles/vdbench/fcp/aff-luns-fcp"
+                Invoke-SSHCommand -Index 0 -Command $VolumeLine | Out-Null
 
+                }
+                
+                $VolumeLine1 = "      "
                 $VolumeLine1 = "echo '$VolumeLine1' >> /root/SharedFiles/vdbench/fcp/aff-luns-fcp"
                 Invoke-SSHCommand -Index 0 -Command $VolumeLine1 | Out-Null
-                $VolumeLine2 = "echo '$VolumeLine2' >> /root/SharedFiles/vdbench/fcp/aff-luns-fcp"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine2 | Out-Null
-                $VolumeLine3 = "echo '$VolumeLine3' >> /root/SharedFiles/vdbench/fcp/aff-luns-fcp"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine3 | Out-Null
-                $VolumeLine4 = "echo '$VolumeLine4' >> /root/SharedFiles/vdbench/fcp/aff-luns-fcp"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine4 | Out-Null
-                $VolumeLine5 = "echo '$VolumeLine5' >> /root/SharedFiles/vdbench/fcp/aff-luns-fcp"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine5 | Out-Null
-                                            
+                                                         
                 $SlaveNumber++
                 
                 Remove-SSHSession -SessionId 0 | Out-Null
-                
-                
-                
+ 
                 }
 
 
@@ -2347,9 +2389,9 @@ $RawXAML  = @"
         <Grid Height="1417" Background="#FFE5E5E5">
             <Expander x:Name="VMwareConfigurationExpander" Header="VMWare Configuration" Height="880" Margin="19,133,47,0" VerticalAlignment="Top" FontWeight="Bold">
                 <Grid x:Name="VMWareConfigurationGrid" Background="#FFE5E5E5" Margin="0,0,-2,0">
-                    <Label Content="VMWare Cluster : " HorizontalAlignment="Left" Height="30" Margin="20,10,0,0" VerticalAlignment="Top" Width="220" FontWeight="Bold"/>
+                    <Label Content="Even Number of Volumes per VM : " HorizontalAlignment="Left" Height="30" Margin="20,80,0,0" VerticalAlignment="Top" Width="220" FontWeight="Bold"/>
                     <Label Content="VCenter IP/HostName :" HorizontalAlignment="Left" Height="30" Margin="20,45,0,0" VerticalAlignment="Top" Width="220" FontWeight="Bold"/>
-                    <Label Content="NetApp Cluster IP Address : " HorizontalAlignment="Left" Height="36" Margin="20,80,0,0" VerticalAlignment="Top" Width="220" FontWeight="Bold"/>
+                    <Label Content="NetApp Cluster IP Address : " HorizontalAlignment="Left" Height="36" Margin="20,10,0,0" VerticalAlignment="Top" Width="220" FontWeight="Bold"/>
                     <Label Content="Number of VM per ESXi Host : " HorizontalAlignment="Left" Height="36" Margin="20,115,0,0" VerticalAlignment="Top" Width="220" FontWeight="Bold"/>
                     <Label Content="Volume/ LUN size in GB : " HorizontalAlignment="Left" Height="36" Margin="20,150,0,0" VerticalAlignment="Top" Width="220" FontWeight="Bold"/>
                     <Label Content="DVSwitch :  " HorizontalAlignment="Left" Height="36" Margin="20,185,0,0" VerticalAlignment="Top" Width="220" FontWeight="Bold"/>
@@ -2368,9 +2410,9 @@ $RawXAML  = @"
                     <RadioButton x:Name="Jumbo" Content="9000" HorizontalAlignment="Left" Margin="310,328,0,0" VerticalAlignment="Top" FontWeight="Bold" GroupName="Framesize"/>
                     <TextBox x:Name="PathOVATextBox" KeyboardNavigation.TabIndex="10" HorizontalAlignment="Left" Height="30" Margin="249,440,0,0" TextWrapping="Wrap" Text="Enter the path here.." VerticalAlignment="Top" Width="393"/>
                     <TextBox x:Name="PathvdbenchTextBox" KeyboardNavigation.TabIndex="9" HorizontalAlignment="Left" Height="30" Margin="249,405,0,0" TextWrapping="Wrap" Text="Enter the path here.." VerticalAlignment="Top" Width="393"/>
-                    <TextBox x:Name="ESXiClusterTextBox" KeyboardNavigation.TabIndex="0" HorizontalAlignment="Left" Height="30" Margin="249,10,0,0" TextWrapping="Wrap" Text="Enter VMWare cluster here.." VerticalAlignment="Top" Width="393"/>
+                    <TextBox x:Name="NumberofVolumesPerVMTextBox" KeyboardNavigation.TabIndex="0" HorizontalAlignment="Left" Height="30" Margin="249,80,0,0" TextWrapping="Wrap" Text="Enter Even Number of Volumes per VM.." VerticalAlignment="Top" Width="393"/>
                     <TextBox x:Name="VCenterIPTextBox" KeyboardNavigation.TabIndex="1" HorizontalAlignment="Left" Height="30" Margin="249,45,0,0" TextWrapping="Wrap" Text="Enter VCenter IP here.. " VerticalAlignment="Top" Width="393"/>
-                    <TextBox x:Name="ClusterIPTextBox" KeyboardNavigation.TabIndex="2" HorizontalAlignment="Left" Height="30" Margin="249,80,0,0" TextWrapping="Wrap" Text="Enter NetApp cluster IP here.." VerticalAlignment="Top" Width="393"/>
+                    <TextBox x:Name="ClusterIPTextBox" KeyboardNavigation.TabIndex="2" HorizontalAlignment="Left" Height="30" Margin="249,10,0,0" TextWrapping="Wrap" Text="Enter NetApp cluster IP here.." VerticalAlignment="Top" Width="393"/>
                     <TextBox x:Name="VolumeSizeTextBox" KeyboardNavigation.TabIndex="4" HorizontalAlignment="Left" Height="30" Margin="249,150,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="100" Text="in GB"/>
                     <TextBox x:Name="NetworkNameTextBox" KeyboardNavigation.TabIndex="5" HorizontalAlignment="Left" Height="30" Margin="249,220,0,0" TextWrapping="Wrap" Text="Enter the VM Network Name of the DVSwitch..." VerticalAlignment="Top" Width="393"/>
                     <TextBox x:Name="PortGroupNameTextBox" KeyboardNavigation.TabIndex="6" HorizontalAlignment="Left" Height="30" Margin="249,255,0,0" TextWrapping="Wrap" Text="Enter the VM Network Name of the VSwitch..." VerticalAlignment="Top" Width="393"/>
@@ -2515,6 +2557,7 @@ $RawXAML  = @"
         </Grid>
     </ScrollViewer >
 </Window>
+
 
 "@
 
@@ -2905,7 +2948,7 @@ $Global = @{}
 
 $Global.Other = @{}
 
-$Global.Other.Add('ESXiCluster',$ESXiClusterTextBox.Text)
+$Global.Other.Add('NumberofVolumesPerVM',$NumberofVolumesPerVMTextBox.Text)
 $Global.Other.Add('VCenterIP',$VCenterIPTextBox.Text)
 $Global.Other.Add('ClusterIP',$ClusterIPTextBox.Text)
 $Global.Other.Add('NumberVMperhost',$NumberVMperhostTextBox.Text)
@@ -3094,7 +3137,7 @@ if($InputConfigFile){
 
 $GlobalObject = Get-Content -Path $InputConfigFile -Raw -ErrorAction SilentlyContinue | ConvertFrom-JSON
 
-$ESXiClusterTextBox.Text =  $GlobalObject.Other.ESXiCluster.Trim()
+$NumberofVolumesPerVMTextBox.Text =  $GlobalObject.Other.NumberofVolumesPerVM.Trim()
 $VCenterIPTextBox.Text = $GlobalObject.Other.VCenterIP.Trim()
 $ClusterIPTextBox.Text = $GlobalObject.Other.ClusterIP.Trim()
 $NumberVMperhostTextBox.Text = $GlobalObject.Other.NumberVMperhost.Trim()
@@ -3281,8 +3324,7 @@ $VMExpander.RenderTransform = New-Object System.Windows.Media.TranslateTransform
 
 }
 
-$ESXiClusterTextBox.Tag = 'ConfigFile'
-$ESXiClusterTextBox.Tag = 'ConfigFile' 
+$NumberofVolumesPerVMTextBox.Tag = 'ConfigFile'
 $VCenterIPTextBox.Tag = 'ConfigFile'
 $ClusterIPTextBox.Tag = 'ConfigFile'
 $VolumeSizeTextBox.Tag = 'ConfigFile'
@@ -3371,10 +3413,10 @@ $PathvdbenchTextBox.Add_GotFocus({
   }
 })
 
-$ESXiClusterTextBox.Add_GotFocus({
-  if($ESXiClusterTextBox.Tag -eq $null) { # clear the text box
-    $ESXiClusterTextBox.Text = ' '
-    $ESXiClusterTextBox.Tag = 'cleared' # use any text you want to indicate that its cleared
+$NumberofVolumesPerVMTextBox.Add_GotFocus({
+  if($NumberofVolumesPerVMTextBox.Tag -eq $null) { # clear the text box
+    $NumberofVolumesPerVMTextBox.Text = ' '
+    $NumberofVolumesPerVMTextBox.Tag = 'cleared' # use any text you want to indicate that its cleared
   }
 })
 

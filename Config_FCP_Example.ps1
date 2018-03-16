@@ -32,7 +32,7 @@
     "Other":  {
                   "iSCSI":  false,
                   "PortGroupName":  "Enter the Network Name of the DVSwitch...",
-                  "ESXiCluster":  "Cluster 1",
+                  "NumberofVolumesPerVM":  "4",
                   "FileSize":  "Enter file size..",
                   "NetworkName":  "DPortGroup VM Network",
                   "Pathvdbench":  "C:\\Users\\Administrator\\Desktop\\poc-toolkit-Netappv1\\vdbench50406.zip",
