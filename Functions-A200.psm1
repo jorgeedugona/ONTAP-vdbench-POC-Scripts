@@ -987,13 +987,13 @@ $LunID = [int]$Global:config.Other.LunID
 
 Function Get-LunID {
 
-$report = Get-VMHost | %{
-    
-    $esxcli = Get-EsxCli -VMHost $_
+$report = Get-VMHost -State Connected | %{
+    #Adding -V2 as per VMware suggestions in PowerCLI. 
+    $esxcli = Get-EsxCli -VMHost $_ -V2
     foreach($Hostserver in $Global:config.Hosts.GetEnumerator()){
       
         if( $Hostserver.Value.Name -eq $esxcli.VMHost.Name ){
-         $esxcli.storage.core.device.list() |
+         $esxcli.storage.core.device.list.Invoke() |
          Select @{N='ESX';E={$esxcli.VMHost.Name}},Device,
             @{N='LUNID'; E={
             $d = $_
@@ -1007,12 +1007,6 @@ $report = Get-VMHost | %{
                     $runtime = ($esxcli.VMHost.ExtensionData.Config.StorageDevice.MultipathInfo.Lun | Where-Object{$_.Id -eq $lunUuid}).Path[0].Name
                     }
             $runtime.Split('L')[1]
-            }},
-            @{N='CapacityGB';E={Get-ScsiLun -CanonicalName $_.Device -VmHost $esxcli.VMHost | Select -ExpandProperty CapacityGB}},
-            @{N='Datastore';E={
-            $d = $_
-            Get-Datastore | where{$_.ExtensionData.Info.Vmfs -and $_.ExtensionData.Info.Vmfs.Extent[0].DiskName -eq $d.Device} |
-            select -ExpandProperty Name
             }}
         }
     }
@@ -1185,7 +1179,9 @@ if (!(Test-Path $inputova)) {
                                     $VSwitch = Get-VirtualSwitch -VMHost $ESXiHost -Standard
                                     New-VirtualPortGroup -VirtualSwitch $VSwitch  -Name "VM Network" -ErrorAction SilentlyContinue | Out-Null    
                                 }
-                                 Import-vApp -Source $inputova -Name vdbench-template -VMHost $ESXiHost -Datastore $DataStoreName -force | Out-Null
+                                 
+                                 $ESXiHostInfo = Get-VMHost $ESXiHost 
+                                 Import-vApp -Source $inputova -Name vdbench-template -VMHost $ESXiHostInfo -Datastore $DataStoreName -force | Out-Null
                                  $template = Get-VM vdbench-template | Set-VM -ToTemplate -Name vdbench-template -Confirm:$false
                                                 if($template -ne $null){
                                                     Write-host "vdbench-template has been successfully created...." -ForegroundColor Green
@@ -1544,6 +1540,7 @@ if($SVM_Prexis -eq "FCP"){
                         
                         $VMHOSTName = $item.Value.Name
                         $specName = $spec[$Location].Name
+                        $ESXiHost = Get-VMHost -Name $VMHOSTName
                         $DataStoreOnline = Get-VMHost -Name $VMHOSTName | Get-Datastore -Name $DataStoreName -Refresh -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
     
                         while(!($DataStoreOnline.State -eq "Available")){
@@ -1557,21 +1554,19 @@ if($SVM_Prexis -eq "FCP"){
                         Write-Host "Cloning VM $specName on ESXI server $VMHOSTName ......." -ForegroundColor Green
   
                         New-VM -VMhost $VMHOSTName -Name $specName -Template vdbench-template -OSCustomizationSpec $specName -Datastore $DataStoreName -DrsAutomationLevel Manual -WarningAction silentlyContinue | Out-Null
-                        $PortGroupname = $Global:config.Other.NetworkName
-                        
+                                                
                         #if this is a vswitch or dswitch.
                         if($Global:config.other.DSwitch){
                         #dswitch
-                        Get-VM $specName | Get-NetworkAdapter | Set-NetworkAdapter -Portgroup "$PortGroupname" -Confirm:$false | Out-Null
-                        
+                        $PortGroupname = $Global:config.Other.NetworkName                        
                         }else{
                         #vswitch
-                        Get-VM $specName | Get-NetworkAdapter | Set-NetworkAdapter -NetworkName "$PortGroupname" -Confirm:$false | Out-Null
-                        
+                        #It has been changed to -Portgroup as per VMware-PowerCLI warnings.
+                        $PortGroupname = $Global:config.Other.PortGroupName
                         }
-                        
-                        
-                                                             
+                        $VMNetwork = Get-VirtualPortGroup -Name $PortGroupname -VMHost $ESXiHost -ErrorAction SilentlyContinue
+                        Get-VM $specName | Get-NetworkAdapter | Set-NetworkAdapter -Portgroup $VMNetwork -Confirm:$false | Out-Null
+                                      
                         }
              $StartLocation = $Location
              $numberVMperhost1 = $numberVMperhost1 + $numberVMperhost
@@ -1978,7 +1973,7 @@ Function vdbench-Files2($SVM_Prexis){
                 
                 $letters = [char[]]('b'[0]..'z'[0]) 
                 for($i=1; $i -lt ($NumberofVolumesPerVM+1); $i++){
-                $letters1 = $letters[$i]
+                $letters1 = $letters[($i-1)]
                 $VolumeLine = "sd=sd$SlaveNumber-$i,host=slave0$SlaveNumber,lun=/dev/sd$letters1,openflags=o_direct,offset=0"
                 $VolumeLine = "echo '$VolumeLine' >> /root/SharedFiles/vdbench/fcp/aff-luns-fcp"
                 Invoke-SSHCommand -Index 0 -Command $VolumeLine | Out-Null
@@ -3143,6 +3138,7 @@ $ClusterIPTextBox.Text = $GlobalObject.Other.ClusterIP.Trim()
 $NumberVMperhostTextBox.Text = $GlobalObject.Other.NumberVMperhost.Trim()
 $VolumeSizeTextBox.Text = $GlobalObject.Other.VolumeSize.Trim()
 $DSwitchRadioButton.IsChecked = $GlobalObject.Other.DSwitch
+$VSWITCHRadioButton.ISChecked = !$DSwitchRadioButton.IsChecked
 $PortGroupNameTextBox.Text = $GlobalObject.Other.PortGroupName.Trim()
 $NetworkNameTextBox.Text = $GlobalObject.Other.NetworkName.Trim()
 $FileSizeTextBox.Text = $GlobalObject.Other.FileSize.Trim()
