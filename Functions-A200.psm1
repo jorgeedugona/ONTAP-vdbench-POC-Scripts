@@ -883,7 +883,20 @@ $SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
 $LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreName
 $LunID = [int]$Global:config.Other.LunID
 
-  if ($LifStatus.OpStatus -eq "up"){
+
+    while($LifStatus.OpStatus -eq "down"){
+    
+    Write-Warning "DATA LIFS are Operational down, Check $SVM_Prexis connectivity, Otherwise type <Ctrl><C> if you want to exit the script"
+    Read-Host "Press ENTER to check connectivity again...."  
+    Write-Host "Checking $SVM_Prexis connectivity...." -ForegroundColor Green
+    $LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreName
+    
+
+    }
+
+
+
+  if($LifStatus.OpStatus -eq "up"){
 
     $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
     $AggrName = $DataAggr[0].Name
