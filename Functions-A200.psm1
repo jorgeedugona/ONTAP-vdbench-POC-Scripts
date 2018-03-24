@@ -1018,6 +1018,7 @@ $report = Get-VMHost -State Connected | %{
                     $lun = $esxcli.VMHost.ExtensionData.Config.StorageDevice.ScsiLun | Where-Object{$_.CanonicalName -eq $d.Device}
                     $lunUuid = $lun.Uuid
                     $runtime = ($esxcli.VMHost.ExtensionData.Config.StorageDevice.MultipathInfo.Lun | Where-Object{$_.Id -eq $lunUuid}).Path[0].Name
+                    $runtime = $runtime.Split(',')[0]
                     }
             $runtime.Split('L')[1]
             }}
