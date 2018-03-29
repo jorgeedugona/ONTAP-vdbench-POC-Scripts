@@ -1,55 +1,93 @@
 ﻿# ALL Functions
-Function Configfile($PSScriptRoot){
+#Logging hass been added to all commands
+Function Configfile($Global:PathNameFiles){
+
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
+
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
 
 Clear-Host
 
 if($Global:config.other.NFS){
 
-$SVM_Prexis = "NFS"
+NFSDeployment
 
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host "                       NFS Deployment                     " -ForegroundColor Green
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host ""
+}elseif($Global:config.other.iSCSI){
 
-#Connecting to VCenter....     
+iSCSIDeployment
 
-$ConnetionVCenter = ConnectVCenter $ConnectedVcenter
+
+}elseif($Global:config.other.FC){
+
+FCPDeployment
+
+}else{
+
+
+Write-Log "==============================================================" -Path $LogFileName -Level Warn
+Write-Log " NFS, iSCSI and FCP flags are set to False in the Config file " -Path $LogFileName -Level Warn
+Write-Log "==============================================================" -Path $LogFileName -Level Warn
+Write-Log " " -Path $LogFileName -Level Warn
+}
+
+}
+#Logging hass been added to all commands
+Function NFSDeployment{
+
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
+
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
+
+$SVM_Prefix = "NFS"
+
+Write-Log "==========================================================" -Path $LogFileName -Level Info
+Write-Log "                       NFS Deployment                     " -Path $LogFileName -Level Info
+Write-Log "==========================================================" -Path $LogFileName -Level Info
+Write-Log " " -Path $LogFileName -Level Info
+
+#Connecting to VCenter....
+
+$ConnetionVCenter = Connect-Vcenter $ConnectedVcenter -LogFilePath $LogFileName
 
 if($ConnetionVCenter -eq "Stop"){
 
-    Write-Host "We failed to connected to Vcenter $ConnectedVcenter" -ForegroundColor Red
+    Write-Log "We failed to connected to Vcenter $ConnectedVcenter" -Path $LogFileName -Level Error 
     Return "FailConnection"
     Break
 }
 
+#Connecting to NetApp Controller.....
 
-#Connecting to Netapp Controller.....
+$ConnectionNetApp = Connect-NetApp $global:CurrentNcController -LogFilePath $LogFileName
 
-$ConnectionNetapp = ConnectNetapp $global:CurrentNcController
-
-if($ConnectionNetapp -eq "Stop"){
+if($ConnectionNetApp -eq "Stop"){
     
-    Write-Host "We failed to connected to Netapp Controller $global:CurrentNcController" -ForegroundColor Red
+    Write-Log "We failed to connected to NetApp Controller $global:CurrentNcController" -Path $LogFileName -Level Error
     Return "FailConnection"
     Break
 }
 
-Write-Host "Creation of the SVM......" -ForegroundColor Green
+Write-Log "Creation of the SVM......" -Path $LogFileName -Level Info
 
-$SVMCreation  = New-ncVserverVD2($SVM_Prexis)
+$SVMCreation  = New-ncVserverVD2($SVM_Prefix)
 if($SVMCreation -eq "SVM_Already_exist"){
     
-    Write-Host "SVM Could not be created in Netapp Controller $global:CurrentNcController" -ForegroundColor Red
+    Write-Log "SVM Could not be created in NetApp Controller $global:CurrentNcController" -Path $LogFileName -Level Error
     Return "SVM_Already_exist"
     Break
 }
 
-Write-Host "Creation of the Data LIFS......" -ForegroundColor Green
+Write-Log "Creation of the Data LIFS......" -Path $LogFileName -Level Info
 
-DataLifsSVM($SVM_Prexis)
+DataLifsSVM($SVM_Prefix)
 
-Write-Host "Creation of the NFS DataStore..... " -ForegroundColor Green
+Write-Log "Creation of the NFS DataStore..... " -Path $LogFileName -Level Info
 
 #This function can only be run one time.
  
@@ -57,276 +95,383 @@ $DataStores = Get-Datastore
 
 if($DataStores.Name -notcontains $Global:config.VMsLIF.lif0.Name){
         
-        Write-Host "Creation of the DataStore LIF......" -ForegroundColor Green
+        Write-Log "Creation of the DataStore LIF......" -Path $LogFileName -Level Info
         
-        DataStoreLifs($SVM_Prexis)
+        DataStoreLifs($SVM_Prefix)
         
-        Mount-NFSDatastore2($SVM_Prexis)
+        $DataLIFS = Mount-NFSDatastore2($SVM_Prefix)
+        if($DataLIFS -eq "DATALIFSDOWN"){
+        Return "DATALIFSDOWN"
+        Break
+        }
 
-        Write-Host "Importing the OVA......" -ForegroundColor Green
+        Write-Log "Importing the OVA......" -Path $LogFileName -Level Info
        
-        Import-OVA2 $PSScriptRoot $SVM_Prexis
+        Import-OVA2 $PSScriptRoot $SVM_Prefix
 
-        Write-Host "Importing the VM Profiles......" -ForegroundColor Green
+        Write-Log "Importing the VM Profiles......" -Path $LogFileName -Level Info
 
-        Import-Specsvdbench2($SVM_Prexis)
+        Import-Specsvdbench2($SVM_Prefix)
 
-        Write-Host "Cloning and Turning ON VMS......" -ForegroundColor Green
+        Write-Log "Cloning and Turning ON VMS......" -Path $LogFileName -Level Info
 
-        Create-VMsvdbench2($SVM_Prexis)
+        Create-VMsvdbench2($SVM_Prefix)
 
-        Write-Host "Configuring DNS on VMs......" -ForegroundColor Green
+        Write-Log "Configuring DNS on VMs......" -Path $LogFileName -Level Info
 
-        Config-DNSVM2($SVM_Prexis)
+        Config-DNSVM2($SVM_Prefix)
 
-        Write-Host "Creating SharedVols VolS......" -ForegroundColor Green
+        Write-Log "Creating SharedVols VolS......" -Path $LogFileName -Level Info
 
-        Shared-Files $SVM_Prexis $PSScriptRoot
+        Shared-Files $SVM_Prefix $PSScriptRoot
 
 }
 
-Write-Host "Creating NFS VolS......" -ForegroundColor Green
+Write-Log "Creating NFS VolS......" -Path $LogFileName -Level Info
 
 $NFSVolCreation = Create-NFSVol2
 
 if($NFSVolCreation -eq "IssuesWithVMs" -or $NFSVolCreation -eq "CancelNFSVols"){
     
-    Write-Host "NFS Vols Could not be created in Netapp Controller $global:CurrentNcController" -ForegroundColor Red
+    Write-Log "NFS Vols Could not be created in NetApp Controller $global:CurrentNcController" -Path $LogFileName -Level Warn
     Return "IssuesWithVMs"
     Break
 }
 
-Write-Host "Changing Config Files NFS VolS......" -ForegroundColor Green
+Write-Log "Changing Config Files NFS VolS......" -Path $LogFileName -Level Info
 
 #NFS - vdbench config files.
 Config-VMNFSFiles2
 
-Write-Host "Creating vdbench Files......" -ForegroundColor Green
+Write-Log "Creating vdbench Files......" -Path $LogFileName -Level Info
 
-vdbench-Files2($SVM_Prexis)
+vdbench-Files2($SVM_Prefix)
+}
+#Logging hass been added to all commands
+Function iSCSIDeployment{
 
-}elseif($Global:config.other.iSCSI){
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
 
-$SVM_Prexis = "iSCSI"
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
 
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host "                    iSCSI Deployment                      " -ForegroundColor Green
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host ""
+$SVM_Prefix = "iSCSI"
+
+Write-Log "==========================================================" -Path $LogFileName -Level Info
+Write-Log "                    iSCSI Deployment                      " -Path $LogFileName -Level Info
+Write-Log "==========================================================" -Path $LogFileName -Level Info
+Write-Log " " -Path $LogFileName -Level Info
     
-#Connecting to VCenter....     
+#Connecting to VCenter....
 
-$ConnetionVCenter = ConnectVCenter $ConnectedVcenter
+$ConnetionVCenter = Connect-Vcenter $ConnectedVcenter -LogFilePath $LogFileName
 
 if($ConnetionVCenter -eq "Stop"){
 
-    Write-Host "We failed to connected to Vcenter $ConnectedVcenter" -ForegroundColor Red
+    Write-Log "We failed to connected to Vcenter $ConnectedVcenter" -Path $LogFileName -Level Error 
     Return "FailConnection"
     Break
 }
 
 
-#Connecting to Netapp Controller.....
+#Connecting to NetApp Controller.....
 
-$ConnectionNetapp = ConnectNetapp $global:CurrentNcController
+$ConnectionNetApp = Connect-NetApp $global:CurrentNcController -LogFilePath $LogFileName
 
-if($ConnectionNetapp -eq "Stop"){
+if($ConnectionNetApp -eq "Stop"){
     
-    Write-Host "We failed to connected to Netapp Controller $global:CurrentNcController" -ForegroundColor Red
+    Write-Log "We failed to connected to NetApp Controller $global:CurrentNcController" -Path $LogFileName -Level Error
     Return "FailConnection"
     Break
 }
 
-Write-Host "Creation of the SVM......" -ForegroundColor Green
+Write-Log "Creation of the SVM......" -Path $LogFileName -Level Info
 
-$SVMCreation  = New-ncVserverVD2($SVM_Prexis)
+$SVMCreation  = New-ncVserverVD2($SVM_Prefix)
 if($SVMCreation -eq "SVM_Already_exist"){
     
-    Write-Host "SVM Could not be created in Netapp Controller $global:CurrentNcController" -ForegroundColor Red
+    Write-Log "SVM Could not be created in NetApp Controller $global:CurrentNcController" -Path $LogFileName -Level Error
     Return "SVM_Already_exist"
     Break
 }
 
-Write-Host "Creation of the Data LIFS......" -ForegroundColor Green
+Write-Log "Creation of the Data LIFS......" -Path $LogFileName -Level Info
 
-DataLifsSVM($SVM_Prexis)
+DataLifsSVM($SVM_Prefix)
 
-Write-Host "Creation of the iSCSI DataStore..... " -ForegroundColor Green
+Write-Log "Creation of the iSCSI DataStore..... " -Path $LogFileName -Level Info
 
 #This function can only be run one time. 
 $DataStores = Get-Datastore
 
 if($DataStores.Name -notcontains $Global:config.VMsLIF.lif0.Name){
         
-        Write-Host "Creation of the DataStore LIF......" -ForegroundColor Green
+        Write-Log "Creation of the DataStore LIF......" -Path $LogFileName -Level Info
         
-        DataStoreLifs($SVM_Prexis)
+        DataStoreLifs($SVM_Prefix)
 
-        Mount-iSCSI-FCP-Datastore2($SVM_Prexis)
+        $DataLIFS = Mount-iSCSI-FCP-Datastore2($SVM_Prefix)
+        if($DataLIFS -eq "DATALIFSDOWN"){
+        Return "DATALIFSDOWN"
+        Break
+        }
 
-        Write-Host "Next Step is Importing the OVA......" -ForegroundColor Green
+        Write-Log "Next Step is Importing the OVA......" -Path $LogFileName -Level Info
        
-        Import-OVA2 $PSScriptRoot $SVM_Prexis
+        Import-OVA2 $PSScriptRoot $SVM_Prefix
 
-        Write-Host "Next Step is Importing the VM Profiles......" -ForegroundColor Green
+        Write-Log "Next Step is Importing the VM Profiles......" -Path $LogFileName -Level Info
 
-        Import-Specsvdbench2($SVM_Prexis)
+        Import-Specsvdbench2($SVM_Prefix)
 
-        Write-Host "Next Step is Cloning and Turning ON VMS......" -ForegroundColor Green
+        Write-Log "Next Step is Cloning and Turning ON VMS......" -Path $LogFileName -Level Info
 
-        Create-VMsvdbench2($SVM_Prexis)
+        Create-VMsvdbench2($SVM_Prefix)
 
-        Write-Host "Configuring DNS on VMs......" -ForegroundColor Green
+        Write-Log "Configuring DNS on VMs......" -Path $LogFileName -Level Info
 
-        Config-DNSVM2($SVM_Prexis)
+        Config-DNSVM2($SVM_Prefix)
 
-        Write-Host "Next Step Creating SharedVols VolS......" -ForegroundColor Green
+        Write-Log "Next Step Creating SharedVols VolS......" -Path $LogFileName -Level Info
 
-        Shared-Files $SVM_Prexis $PSScriptRoot
+        Shared-Files $SVM_Prefix $PSScriptRoot
 
 }
 
-Write-Host "Creating iSCSI LUNs......" -ForegroundColor Green
+Write-Log "Creating iSCSI LUNs......" -Path $LogFileName -Level Info
 
-$LUNsCreation = Create-iSCSI-FC-Lun2($SVM_Prexis)
+$LUNsCreation = Create-iSCSI-FC-Lun2($SVM_Prefix)
 
 if($LUNsCreation -eq "IssuesWithVMs" -or $LUNsCreation -eq "CancelLunsVols"){
     
-    Write-Host "LUN Vols could not be created in Netapp Controller $global:CurrentNcController" -ForegroundColor Red
+    Write-Log "LUN Vols could not be created in NetApp Controller $global:CurrentNcController" -Path $LogFileName -Level Error
     Return "IssuesWithVMs"
     Break
 }
 
-Write-Host "Creating RDM disks......" -ForegroundColor Green
+Write-Log "Creating RDM disks......" -Path $LogFileName -Level Info
 
 Create-RDMLun2
 
-Write-Host "Creating vdbench Files......" -ForegroundColor Green
+Write-Log "Creating vdbench Files......" -Path $LogFileName -Level Info
 
-vdbench-Files2($SVM_Prexis)
+vdbench-Files2($SVM_Prefix)
 
 
-}elseif($Global:config.other.FC){
+}
+#Logging hass been added to all commands
+Function FCPDeployment{
 
-$SVM_Prexis = "FCP"
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
 
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host "                    FCP Deployment                        " -ForegroundColor Green
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host ""
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
+
+$SVM_Prefix = "FCP"
+
+Write-Log "==========================================================" -Path $LogFileName -Level Info
+Write-Log "                    FCP Deployment                        " -Path $LogFileName -Level Info
+Write-Log "==========================================================" -Path $LogFileName -Level Info
+Write-Log " " -Path $LogFileName -Level Info
     
-#Connecting to VCenter....     
+#Connecting to VCenter....
 
-$ConnetionVCenter = ConnectVCenter $ConnectedVcenter
+$ConnetionVCenter = Connect-Vcenter $ConnectedVcenter -LogFilePath $LogFileName
 
 if($ConnetionVCenter -eq "Stop"){
 
-    Write-Host "We failed to connected to Vcenter $ConnectedVcenter" -ForegroundColor Red
+    Write-Log "We failed to connected to Vcenter $ConnectedVcenter" -Path $LogFileName -Level Error 
     Return "FailConnection"
     Break
 }
 
 
-#Connecting to Netapp Controller.....
+#Connecting to NetApp Controller.....
 
-$ConnectionNetapp = ConnectNetapp $global:CurrentNcController
+$ConnectionNetApp = Connect-NetApp $global:CurrentNcController -LogFilePath $LogFileName
 
-if($ConnectionNetapp -eq "Stop"){
+if($ConnectionNetApp -eq "Stop"){
     
-    Write-Host "We failed to connected to Netapp Controller $global:CurrentNcController" -ForegroundColor Red
+    Write-Log "We failed to connected to NetApp Controller $global:CurrentNcController" -Path $LogFileName -Level Error
     Return "FailConnection"
     Break
 }
 
-Write-Host "Creation of the SVM......" -ForegroundColor Green
+Write-Log "Creation of the SVM......" -Path $LogFileName -Level Info
 
-$SVMCreation  = New-ncVserverVD2($SVM_Prexis)
+$SVMCreation  = New-ncVserverVD2($SVM_Prefix)
 if($SVMCreation -eq "SVM_Already_exist"){
     
-    Write-Host "SVM Could not be create in Netapp Controller $global:CurrentNcController" -ForegroundColor Red
+    Write-Log "SVM Could not be create in NetApp Controller $global:CurrentNcController" -Path $LogFileName -Level Error
     Return "SVM_Already_exist"
     Break
 }
 
 
 
-Write-Host "Creation of the Data LIFS......" -ForegroundColor Green
+Write-Log "Creation of the Data LIFS......" -Path $LogFileName -Level Info
 
-DataLifsSVM($SVM_Prexis)
+DataLifsSVM($SVM_Prefix)
 
-Write-Host "Creation of the FC DataStore..... " -ForegroundColor Green
+Write-Log "Creation of the FC DataStore..... " -Path $LogFileName -Level Info
 
 #This function can only be run one time. 
 $DataStores = Get-Datastore
 
 if($DataStores.Name -notcontains $Global:config.VMsLIF.lif0.Name){
         
-        Write-Host "Creation of the DataStore LIF......" -ForegroundColor Green
+        Write-Log "Creation of the DataStore LIF......" -Path $LogFileName -Level Info
         
-        DataStoreLifs($SVM_Prexis)
+        DataStoreLifs($SVM_Prefix)
 
-        Mount-iSCSI-FCP-Datastore2($SVM_Prexis)
+        $DataLIFS = Mount-iSCSI-FCP-Datastore2($SVM_Prefix)
+        if($DataLIFS -eq "DATALIFSDOWN"){
+        Return "DATALIFSDOWN"
+        Break
+        }
 
-        Write-Host "Next Step is Importing the OVA......" -ForegroundColor Green
+        Write-Log "Next Step is Importing the OVA......" -Path $LogFileName -Level Info
        
-        Import-OVA2 $PSScriptRoot $SVM_Prexis
+        Import-OVA2 $PSScriptRoot $SVM_Prefix
 
-        Write-Host "Next Step is Importing the VM Profiles......" -ForegroundColor Green
+        Write-Log "Next Step is Importing the VM Profiles......" -Path $LogFileName -Level Info
 
-        Import-Specsvdbench2($SVM_Prexis)
+        Import-Specsvdbench2($SVM_Prefix)
 
-        Write-Host "Next Step is Cloning and Turning ON VMS......" -ForegroundColor Green
+        Write-Log "Next Step is Cloning and Turning ON VMS......" -Path $LogFileName -Level Info
 
-        Create-VMsvdbench2($SVM_Prexis)
+        Create-VMsvdbench2($SVM_Prefix)
 
-        Write-Host "Configuring DNS on VMs......" -ForegroundColor Green
+        Write-Log "Configuring DNS on VMs......" -Path $LogFileName -Level Info
 
-        Config-DNSVM2($SVM_Prexis)
+        Config-DNSVM2($SVM_Prefix)
 
-        Write-Host "Next Step Creating SharedVols VolS......" -ForegroundColor Green
+        Write-Log "Next Step Creating SharedVols VolS......" -Path $LogFileName -Level Info
 
-        Shared-Files $SVM_Prexis $PSScriptRoot
+        Shared-Files $SVM_Prefix $PSScriptRoot
 
 }
 
-Write-Host "Creating FC LUNs......" -ForegroundColor Green
+Write-Log "Creating FC LUNs......" -Path $LogFileName -Level Info
 
-$LUNsCreation = Create-iSCSI-FC-Lun2($SVM_Prexis)
+$LUNsCreation = Create-iSCSI-FC-Lun2($SVM_Prefix)
 
 if($LUNsCreation -eq "IssuesWithVMs" -or $LUNsCreation -eq "CancelLunsVols"){
     
-    Write-Host "LUN Vols could not be created in Netapp Controller $global:CurrentNcController" -ForegroundColor Red
+    Write-Log "LUN Vols could not be created in NetApp Controller $global:CurrentNcController" -Path $LogFileName -Level Error
     Return "IssuesWithVMs"
     Break
 }
 
-Write-Host "Creating RDM disks......" -ForegroundColor Green
+Write-Log "Creating RDM disks......" -Path $LogFileName -Level Info
 
 Create-RDMLun2
 
-Write-Host "Creating vdbench Files......" -ForegroundColor Green
+Write-Log "Creating vdbench Files......" -Path $LogFileName -Level Info
 
-vdbench-Files2($SVM_Prexis)
+vdbench-Files2($SVM_Prefix)
 
-Write-Host "Deployment has Finished......" -ForegroundColor Green
+Write-Log "Deployment has Finished......" -Path $LogFileName -Level Info
 
-}else{
+} 
+ #Logging hass been added to all commands
+Function Write-Log { 
+    [CmdletBinding()] 
+    Param 
+    ( 
+        [Parameter(Mandatory=$false, 
+                   ValueFromPipeline=$true)] 
+        [Alias("LogContent")] 
+        [string[]]$Message, 
 
+        [Parameter(Mandatory=$false)]
+        [Alias("LogContent2")] 
+        [string[]]$Message2,
 
-Write-Warning "============================================================="
-Write-Warning " NFS, iSCSI and FCP flags are set to False in the Config file "
-Write-Warning "============================================================="
-Write-Warning ""
+        [Parameter(Mandatory=$false,
+                    ValueFromPipeline=$true)]
+        [Alias("LogContent3")] 
+        [string[]]$Message3,
  
-
-
+        [Parameter(Mandatory=$false)]
+        [ValidateNotNullOrEmpty()]  
+        [Alias('LogPath')]
+        [string]$Path, 
+         
+        [Parameter(Mandatory=$false)] 
+        [ValidateSet("Error","Warn","Info")] 
+        [string]$Level="Info", 
+         
+        [Parameter(Mandatory=$false)] 
+        [switch]$NoClobber 
+    ) 
+ 
+    Begin 
+    { 
+        # Set VerbosePreference to Continue so that verbose messages are displayed. 
+        $VerbosePreference = 'Continue' 
+    } 
+    Process 
+    { 
+         
+        # If the file already exists and NoClobber was specified, do not write to the log. 
+        if ((Test-Path $Path) -AND $NoClobber) { 
+            Write-Error "Log file $Path already exists, and you specified NoClobber. Either delete the file or specify a different name." 
+            Return 
+            } 
+ 
+        # If attempting to write to a log file in a folder/path that doesn't exist create the file including the path. 
+        elseif (!(Test-Path $Path)) { 
+            Write-Verbose "Creating $Path." 
+            $NewLogFile = New-Item $Path -Force -ItemType File 
+            } 
+ 
+        else { 
+            # Nothing to see here yet. 
+            } 
+ 
+        # Format Date for our Log File 
+        $FormattedDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss" 
+        
+            # Write message to error, warning, or verbose pipeline and specify $LevelText
+            $Message=$Message+$Message2+" "+$Message3
+            switch ($Level) { 
+                'Error' { 
+                    Write-Host $Message -ForegroundColor Red
+                    $LevelText = 'ERROR:' 
+                    } 
+                'Warn' { 
+                    Write-Host $Message -ForegroundColor Yellow 
+                    $LevelText = 'WARNING:' 
+                    } 
+                'Info' { 
+                    Write-Host $Message -ForegroundColor Green
+                    $LevelText = 'INFO:' 
+                    } 
+                }  
+         
+            # Write log entry to $Path 
+            "$FormattedDate $LevelText $Message" | Out-File -FilePath $Path -Append          
+    } 
+    End 
+    { 
+    } 
 }
+#Logging hass been added to all commands
+function Import-ConfigFile ($Global:PathNameFiles){
 
-}
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
 
-function Import-ConfigFile ([string] $ConfigFile){
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
 
-$GlobalObject = Get-Content -Path $ConfigFile -Raw -ErrorAction SilentlyContinue | ConvertFrom-JSON
+$GlobalObject = Get-Content -Path $ConfigFilePath -Raw -ErrorAction SilentlyContinue | ConvertFrom-JSON
 
 ################################################################
 ################################################################
@@ -369,18 +514,21 @@ $Global:config.Other.Add('Jumbo',$false)
 
 if($GlobalObject.Other.NFS -eq 'true'){
 $Global:config.Other.Add('NFS',$true)
+$SVM_Prefix = "NFS"
 }else{
 $Global:config.Other.Add('NFS',$false)
 }
 
 if($GlobalObject.Other.iSCSI -eq 'true'){
 $Global:config.Other.Add('iSCSI',$true)
+$SVM_Prefix = "iSCSI"
 }else{
 $Global:config.Other.Add('iSCSI',$false)
 }
 
 if($GlobalObject.Other.FC -eq 'true'){
 $Global:config.Other.Add('FC',$true)
+$SVM_Prefix = "FCP"
 }else{
 $Global:config.Other.Add('FC',$false)
 }
@@ -491,7 +639,7 @@ $Global:config.LIFSFC.lif12.Add('Port',$GlobalObject.LIFSFC.lif12.Port.Trim())
 $Global:config.VMs = @{}
 $Global:config.VMs.VM00 = @{}
 
-$Global:config.VMs.VM00.Add('Name',$GlobalObject.SVM.Name+"_Test00")
+$Global:config.VMs.VM00.Add('Name',$GlobalObject.SVM.Name+"_"+$SVM_Prefix+"_00")
 $Global:config.VMs.VM00.Add('IP',$GlobalObject.VMs.VM00.IP.Trim())
 $Global:config.VMs.VM00.Add('Gateway',$GlobalObject.VMs.VM00.Gateway.Trim())
 $Global:config.VMs.VM00.Add('Netmask',$GlobalObject.VMs.VM00.Netmask.Trim())
@@ -509,7 +657,7 @@ if($item.Name -ne "VM00"){
 $ItemName = $item.Name
 $NameVariableVM = $ItemName
 $Global:config.VMs.$NameVariableVM = @{} 
-$Global:config.VMs.$NameVariableVM.Add('Name',$GlobalObject.SVM.Name+"_Test0"+$Count)
+$Global:config.VMs.$NameVariableVM.Add('Name',$GlobalObject.SVM.Name+"_"+$SVM_Prefix+"_0"+$Count)
 $Global:config.VMs.$NameVariableVM.Add('IP',$GlobalObject.VMs.$NameVariableVM.IP)
 $Count++
 }
@@ -537,120 +685,131 @@ $Count++
 
 }
 
-Write-Warning "Please find below the Config file selected:"
-Write-Host ""
-$ConfigFile
-Write-Host "VMWare  Configuration               " -ForegroundColor Green
-Write-Host "iSCSI is used                     : " $Global:config.Other.iSCSI -ForegroundColor Green
-Write-Host "LUN ID                            : " $Global:config.Other.LunID -ForegroundColor Green
-Write-Host "NFS is used                       : " $Global:config.Other.NFS -ForegroundColor Green
-Write-Host "FCP is used                       : " $Global:config.Other.FC -ForegroundColor Green
-Write-Host "Number of Volumes per VM          : " $Global:config.Other.NumberofVolumesPerVM -ForegroundColor Green
-Write-Host "VCenter IP Address                : " $Global:config.Other.VCenterIP -ForegroundColor Green
-Write-Host "Cluster IP Address                : " $Global:config.Other.ClusterIP -ForegroundColor Green
+
+Write-Log "Please find below the Config file imported:" -Path $LogFileName -Level Info
+Write-Log " " -Path $LogFileName -Level Info
+Write-Log "$ConfigFilePath" -Path $LogFileName -Level Info
+Write-Log "VMWare  Configuration               " -Path $LogFileName -Level Info
+Write-Log "iSCSI is used                     : " $Global:config.Other.iSCSI -Path $LogFileName -Level Info
+Write-Log "LUN ID                            : " $Global:config.Other.LunID -Path $LogFileName -Level Info
+Write-Log "NFS is used                       : " $Global:config.Other.NFS -Path $LogFileName -Level Info
+Write-Log "FCP is used                       : " $Global:config.Other.FC -Path $LogFileName -Level Info
+Write-Log "Number of Volumes per VM          : " $Global:config.Other.NumberofVolumesPerVM -Path $LogFileName -Level Info
+Write-Log "VCenter IP Address                : " $Global:config.Other.VCenterIP -Path $LogFileName -Level Info
+Write-Log "Cluster IP Address                : " $Global:config.Other.ClusterIP -Path $LogFileName -Level Info
 if($Global:config.Other.DSwitch){
-Write-Host "Network Name                      : " $Global:config.Other.NetworkName -ForegroundColor Green
+Write-Log "Network Name                      : " $Global:config.Other.NetworkName -Path $LogFileName -Level Info
 }else{
-Write-Host "PortGroup Name                    : " $Global:config.Other.PortGroupName -ForegroundColor Green
+Write-Log "PortGroup Name                    : " $Global:config.Other.PortGroupName -Path $LogFileName -Level Info
 }
-Write-Host "Number of VMs per Host            : " $Global:config.Other.NumberVMperhost -ForegroundColor Green
-Write-Host "Path vdbench binaries             : " $Global:config.Other.Pathvdbench -ForegroundColor Green
-Write-Host "Path OVA file                     : " $Global:config.Other.PathOVA -ForegroundColor Green
-Write-Host "File Size vdbench                 : " $Global:config.Other.VolumeSize -ForegroundColor Green
-Write-host "DSwitch is used                   : " $Global:config.Other.DSwitch -ForegroundColor Green
-Write-Host ""
-Write-Host "LIF Configuration for Datatstores : " -ForegroundColor Green
-Write-Host "LIF Name                          : " $Global:config.VMsLIF.lif0.Name -ForegroundColor Green
-Write-Host "LIF IP Address                    : " $Global:config.VMsLIF.lif0.IP -ForegroundColor Green
-Write-Host "LIF Gateway                       : " $Global:config.VMsLIF.lif0.Gateway -ForegroundColor Green
-Write-Host "LIF Netmask                       : " $Global:config.VMsLIF.lif0.Netmask -ForegroundColor Green
-Write-Host "Lif Port                          : " $Global:config.VMsLIF.lif0.Port -ForegroundColor Green
-Write-Host ""
+Write-Log "Number of VMs per Host            : " $Global:config.Other.NumberVMperhost -Path $LogFileName -Level Info
+Write-Log "Path vdbench binaries             : " $Global:config.Other.Pathvdbench -Path $LogFileName -Level Info
+Write-Log "Path OVA file                     : " $Global:config.Other.PathOVA -Path $LogFileName -Level Info
+Write-Log "File Size vdbench                 : " $Global:config.Other.VolumeSize -Path $LogFileName -Level Info
+Write-Log "DSwitch is used                   : " $Global:config.Other.DSwitch -Path $LogFileName -Level Info
+Write-Log " " -Path $LogFileName -Level Info
+Write-Log "LIF Configuration for Datatstores : " -Path $LogFileName -Level Info
+Write-Log "LIF Name                          : " $Global:config.VMsLIF.lif0.Name -Path $LogFileName -Level Info
+Write-Log "LIF IP Address                    : " $Global:config.VMsLIF.lif0.IP -Path $LogFileName -Level Info
+Write-Log "LIF Gateway                       : " $Global:config.VMsLIF.lif0.Gateway -Path $LogFileName -Level Info
+Write-Log "LIF Netmask                       : " $Global:config.VMsLIF.lif0.Netmask -Path $LogFileName -Level Info
+Write-Log "Lif Port                          : " $Global:config.VMsLIF.lif0.Port -Path $LogFileName -Level Info
+Write-Log " " -Path $LogFileName -Level Info
 
 if($Global:config.Other.iSCSI){
-        Write-Host ""        
-        Write-Host "LIF Configuration for iSCSI : " -ForegroundColor Green
+        Write-Log " " -Path $LogFileName -Level Info        
+        Write-Log "LIF Configuration for iSCSI : " -Path $LogFileName -Level Info
         $num = 0
         ForEach($item in $Global:config.LIFSiSCSI.GetEnumerator()){
-        Write-Host ""
-        Write-Host "LIF $num Name        : " $item.Value.Name -ForegroundColor Green
-        Write-Host "LIF $num IP          : " $item.Value.IP -ForegroundColor Green
-        Write-Host "LIF $num Gateway     : " $item.Value.Gateway -ForegroundColor Green
-        Write-Host "LIF $num Netmask     : " $item.Value.Netmask -ForegroundColor Green
-        Write-Host "LIF $num Port        : " $item.Value.Port -ForegroundColor Green
-        Write-Host ""
+        Write-Log " " -Path $LogFileName -Level Info
+        Write-Log "LIF $num Name        : " $item.Value.Name -Path $LogFileName -Level Info
+        Write-Log "LIF $num IP          : " $item.Value.IP -Path $LogFileName -Level Info
+        Write-Log "LIF $num Gateway     : " $item.Value.Gateway -Path $LogFileName -Level Info
+        Write-Log "LIF $num Netmask     : " $item.Value.Netmask -Path $LogFileName -Level Info
+        Write-Log "LIF $num Port        : " $item.Value.Port -Path $LogFileName -Level Info
+        Write-Log " " -Path $LogFileName -Level Info
         $num++
         }
                 
 }elseif($Global:config.Other.NFS){
-        Write-Host "LIF Configuration for NFS : " -ForegroundColor Green
-        Write-Host ""
+        Write-Log "LIF Configuration for NFS : " -Path $LogFileName -Level Info
+        Write-Log " " -Path $LogFileName -Level Info
         $num = 0
         ForEach($item in $Global:config.LIFSNFS.GetEnumerator()){
         
-        Write-Host "LIF $num Name    : " $item.Value.Name -ForegroundColor Green
-        Write-Host "LIF $num IP      : " $item.Value.IP -ForegroundColor Green
-        Write-Host "LIF $num Gateway : " $item.Value.Gateway -ForegroundColor Green
-        Write-Host "LIF $num Netmask : " $item.Value.Netmask -ForegroundColor Green
-        Write-Host "LIF $num Port    : " $item.Value.Port -ForegroundColor Green
-        Write-Host ""
+        Write-Log "LIF $num Name    : " $item.Value.Name -Path $LogFileName -Level Info
+        Write-Log "LIF $num IP      : " $item.Value.IP -Path $LogFileName -Level Info
+        Write-Log "LIF $num Gateway : " $item.Value.Gateway -Path $LogFileName -Level Info
+        Write-Log "LIF $num Netmask : " $item.Value.Netmask -Path $LogFileName -Level Info
+        Write-Log "LIF $num Port    : " $item.Value.Port -Path $LogFileName -Level Info
+        Write-Log " " -Path $LogFileName -Level Info
         $num++
         }
 }elseif($Global:config.Other.FC){
 
-        Write-Host "LIF Configuration for FC : " -ForegroundColor Green
-        Write-Host ""
+        Write-Log "LIF Configuration for FC : " -Path $LogFileName -Level Info
+        Write-Log " " -Path $LogFileName -Level Info
         $num = 0
         ForEach($item in $Global:config.LIFSFC.GetEnumerator()){
         
-        Write-Host "LIF $num Name      : " $item.Value.Name -ForegroundColor Green
-        Write-Host "LIF $num port      : " $item.Value.Port -ForegroundColor Green
-        Write-Host ""
+        Write-Log "LIF $num Name      : " $item.Value.Name -Path $LogFileName -Level Info
+        Write-Log "LIF $num port      : " $item.Value.Port -Path $LogFileName -Level Info
+        Write-Log " " -Path $LogFileName -Level Info
         $num++
         }
 }
 
-Write-Host ""
+Write-Log " " -Path $LogFileName -Level Info
 $num = 0
-Write-Host "Hosts Configuration : " -ForegroundColor Green
+Write-Log "Hosts Configuration : " -Path $LogFileName -Level Info
 ForEach($item in $Global:config.Hosts.GetEnumerator()){
-Write-Host ""
-Write-Host "Host $num Name    : " $item.Value.Name -ForegroundColor Green
+Write-Log " " -Path $LogFileName -Level Info
+Write-Log "Host $num Name    : " $item.Value.Name -Path $LogFileName -Level Info
 $num++
 
 }
 
 $num = 0
-Write-Host ""
-Write-Host "VMs Configuration : " -ForegroundColor Green
-Write-Host ""
+Write-Log " " -Path $LogFileName -Level Info
+Write-Log "VMs Configuration : " -Path $LogFileName -Level Info
+Write-Log " " -Path $LogFileName -Level Info
 ForEach($item in $Global:config.VMs.GetEnumerator()){
 
-Write-Host "VM $num Name         : " $item.Value.Name -ForegroundColor Green
-Write-Host "VM $num IP           : " $item.Value.IP -ForegroundColor Green
-Write-Host "VM $num Gateway      : " $Global:config.VMs.VM00.Gateway -ForegroundColor Green
-Write-Host "VM $num Netmask      : " $Global:config.VMs.VM00.Netmask -ForegroundColor Green
-Write-Host ""
+Write-Log "VM $num Name         : " $item.Value.Name -Path $LogFileName -Level Info
+Write-Log "VM $num IP           : " $item.Value.IP -Path $LogFileName -Level Info
+Write-Log "VM $num Gateway      : " $Global:config.VMs.VM00.Gateway -Path $LogFileName -Level Info
+Write-Log "VM $num Netmask      : " $Global:config.VMs.VM00.Netmask -Path $LogFileName -Level Info
+Write-Log " " -Path $LogFileName -Level Info
 $num++
 }
 
-
-Write-Host "Config File was successfully Imported......" -ForegroundColor Green
+Write-Log "Config File was successfully Imported......" -Path $LogFileName -Level Info
 
 }
+#Logging hass been added to all commands
+function Connect-Vcenter {
+     [CmdletBinding()]
+     Param(
 
-function ConnectVCenter {
+     [parameter(Mandatory=$false, 
+     HelpMessage="VCenter is connected...",
+     ValueFromPipelineByPropertyName=$true)]
+     [VMware.VimAutomation.ViCore.Impl.V1.VIServerImpl]$ConnectedVcenter,
 
-[CmdletBinding()]Param(
+     [parameter(Mandatory=$false)] 
+     [string]$LogFilePath
 
-[parameter(Mandatory=$false, HelpMessage="VCenter is connected...")]
-[VMware.VimAutomation.ViCore.Impl.V1.VIServerImpl]$ConnectedVcenter
+   )
 
-)
+   Begin
+   {
+   $ipVcenter = $Global:config.Other.VCenterIP
+   }
 
-$ipVcenter = $Global:config.Other.VCenterIP
+   Process
+   {
 
-if($ConnectedVcenter){
+   if($ConnectedVcenter){
   break
   }
    else{
@@ -658,62 +817,75 @@ if($ConnectedVcenter){
             Do {
                     # Loop until we get a valid userid/password and can connect, or some other kind of error occurs
                     # $ipVcenter = Read-Host "Please enter the IP/Hostname of VCenter "
-                    Write-Host "Connecting to VCenter.......  " -ForegroundColor Green
+                    Write-Log "Connecting to VCenter.......  " -Path $LogFilePath -Level Info
                     $ConnectedVcenter = Connect-VIServer -Server $ipVcenter -WarningAction silentlyContinue -ErrorAction SilentlyContinue -ErrorVariable Err
                     If ($Err.Count -gt 0) {
                             # Some kind of error, figure out if its a bad password
                                     If ($Err.Exception.GetType().Name -eq "InvalidLogin") {
-                                        Write-Host "Incorrect user name or password, try again..." -ForegroundColor Red
+                                        Write-Log "Incorrect user name or password, please try again..." -Path $LogFilePath -Level Error
                                         
                                     }Else{
                                         # Something else went wrong, just display the text and exit
-                                        $Err.Exception
+                                        $Error = $Err.Exception
+                                        Write-Log "$Error" -Path $LogFilePath -Level Error
                                         return "Stop"
                                         break
                                      }
                             }Else{
-                             Write-Host "User name and password are valid.." -ForegroundColor Green
+                             Write-Log "User name and password are valid.." -Path $LogFilePath -Level Info
                             }
                    
                 }
                 Until ($Err.Count -eq 0)   
          }
+   }
+
+   End
+   {
+   }
+
 }
+#Logging hass been added to all commands
+function Connect-NetApp {
+     [CmdletBinding()]
+     Param(
 
-function ConnectNetapp {
+     [parameter(Mandatory=$false, 
+     HelpMessage="NetApp Controller is connected...",
+     ValueFromPipelineByPropertyName=$true)]
+     [NetApp.Ontapi.Filer.C.NcController]$global:CurrentNcController,
 
-[CmdletBinding()]Param(
+     [parameter(Mandatory=$false)]
+     [string]$LogFilePath
 
-[parameter(Mandatory=$false, HelpMessage="Netapp Controller is connected...")]
-[NetApp.Ontapi.Filer.C.NcController]$global:CurrentNcController
-
-)
+     )
 
 $ipCluster = $Global:config.Other.ClusterIP
 
    if ($global:CurrentNcController){
-                    Write-Host "You are currently connected to " 
+                    Write-Log "You are currently connected to " -Path $LogFilePath -Level Info
                     $global:CurrentNcController
                   } else {
                             Do {
                                 # Loop until we get a valid userid/password and can connect, or some other kind of error occurs
                                 # $ipCluster = Read-Host "Please enter the Management IP of the Ontap Cluster "
-                                 Write-Host "Connecting to Netapp Cluster .......  " -ForegroundColor Green
+                                 Write-Log "Connecting to NetApp Cluster .......  " -Path $LogFilePath -Level Info
                                 $Cluster = Connect-NcController $ipCluster -credential (Get-NcCredential) -WarningAction silentlyContinue -ErrorAction SilentlyContinue -ErrorVariable Err
                                          
                                 If ($Err.Count -gt 0) {
                                                 # Some kind of error, figure out if its a bad password
-                                                If ($Err.Exception.GetType().Name -eq "NaConnectionException") {
-                                                    Write-Host "Incorrect user name or password, to try again... " -ForegroundColor Red
+                                                If (($Err.Exception.GetType().Name -eq "NaConnectionException") -or ($Err.Exception.GetType().Name -eq "NaAuthException")) {
+                                                    Write-Log "Incorrect user name or password, please try again... " -Path $LogFilePath -Level Error
                                                     
                                                     }Else{
                                                      # Something else went wrong, just display the text and exit
-                                                     Write-Host $Err.Exception -ForegroundColor Red
+                                                     $Error = $Err.Exception
+                                                     Write-Log $Error -Path $LogFilePath -Level Warn
                                                      return "Stop"
                                                      break 
                                                    }
                                         }Else{
-                                        Write-Host "User name and password are valid.." -ForegroundColor Green
+                                        Write-Log "User name and password are valid.." -Path $LogFilePath -Level Info
                                         }
                                 }
                           Until ($Err.Count -eq 0)
@@ -721,248 +893,319 @@ $ipCluster = $Global:config.Other.ClusterIP
 
 
 }
+#Logging hass been added to all commands
+Function New-ncVserverVD2 ($SVM_Prefix) {
 
-Function New-ncVserverVD2 ($SVM_Prexis) {
+   # $Global:PathNameFiles is an array
+   # $Global:PathNameFiles[0] is the Configuratiton path.
+   # $Global:PathNameFiles[1] is the log name.
 
-   $Vservers = Get-NcVserver
+   $ConfigFilePath = $Global:PathNameFiles[0]
+   $LogFileName = $Global:PathNameFiles[1]
 
-   $SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
+   $Vservers = Get-NcVserver -ErrorVariable Err -ErrorAction SilentlyContinue
+
+   $SVM_NAME = $Global:config.SVM.Name+"_"+$SVM_Prefix
 
    if ($Vservers.Vserver -contains $SVM_NAME){
-                Write-Warning "SVM under the name $SVM_NAME already exists, please delete it by choosing "
-                Write-Warning "the delete option from the main Menu "
-                Return "SVM_Already_exist"
-                Break
+        Write-Log "SVM under the name $SVM_NAME already exists, please delete it by choosing " -Path $LogFileName -Level Warn
+        Write-Log "the delete option from the main Menu " -Path $LogFileName -Level Warn
+        Return "SVM_Already_exist"
+        Break
 
-                }else{
-                # create a new SVM
+        }else{
+        # create a new SVM
 
-                if($SVM_Prexis -eq "iSCSI"){
+        if($SVM_Prefix -eq "iSCSI"){
                 
-                $AllowProtocols = "nfs","iscsi"
+        $AllowProtocols = "nfs","iscsi"
                 
-                }elseif($SVM_Prexis -eq "NFS"){
+        }elseif($SVM_Prefix -eq "NFS"){
 
-                $AllowProtocols = "nfs"
+        $AllowProtocols = "nfs"
                 
-                }elseif($SVM_Prexis -eq "FCP"){
+        }elseif($SVM_Prefix -eq "FCP"){
                 
-                $AllowProtocols = "nfs","fcp"
+        $AllowProtocols = "nfs","fcp"
                 
-                }
-
-                
-                $selection = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
-                
-                New-NcVserver -Name $SVM_NAME `
-                -RootVolume "vdbench_root" `
-                -RootVolumeAggregate $selection[0].Name `
-                -RootVolumeSecurityStyle "unix" `
-                -Language "C.UTF-8" `
-                -NameServerSwitch "file" | Out-Null
-                Set-NcVserver -Name $SVM_NAME `
-                -Aggregates $selection[0].Name, $selection[1].Name `
-                -AllowedProtocols $AllowProtocols | Out-Null
-                
+        }
+        $selection = Get-NcAggr -ErrorVariable +Err -ErrorAction SilentlyContinue | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
+        #Creating SVM 
+        New-NcVserver -Name $SVM_NAME -RootVolume "vdbench_root" `
+                        -RootVolumeAggregate $selection[0].Name -RootVolumeSecurityStyle "unix" `
+                        -Language "C.UTF-8" -NameServerSwitch "file" `
+                        -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+        #Configuring the SVM Server
+        Set-NcVserver -Name $SVM_NAME -Aggregates $selection[0].Name, $selection[1].Name `
+                        -AllowedProtocols $AllowProtocols `
+                        -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null                
    }
+
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
    
 }
+#Logging hass been added to all commands
+Function DataStoreLifs($SVM_Prefix){
 
-Function DataStoreLifs($SVM_Prexis){
-
-$SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
+$SVM_NAME = $Global:config.SVM.Name+"_"+$SVM_Prefix
 
 #Delete the Lifs in case the Script was run before. 
-$CurrentLifs = Get-NcNetInterface -Vserver $SVM_NAME -Name "$SVM_NAME*"
-
+$CurrentLifs = Get-NcNetInterface -Vserver $SVM_NAME -Name "$SVM_NAME*" -ErrorVariable Err -ErrorAction SilentlyContinue
 
         if($CurrentLifs.Count -gt 0){
 
-        Set-NcNetInterface -Name "$SVM_NAME*" -Vserver "$SVM_NAME" -AdministrativeStatus down -Confirm:$false | Out-Null
-        Remove-NcNetInterface -Name "$SVM_NAME*" -Vserver "$SVM_NAME" -Confirm:$false | Out-Null
-        Remove-NcNetRoute -Destination 0.0.0.0/0 -Gateway $Global:config.VMsLIF.lif0.Gateway  -Metric 20 -VserverContext "$SVM_NAME" -Confirm:$false | Out-Null
+        Set-NcNetInterface -Name "$SVM_NAME*" -Vserver "$SVM_NAME" `
+                           -AdministrativeStatus down -Confirm:$false `
+                           -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+        Remove-NcNetInterface -Name "$SVM_NAME*" -Vserver "$SVM_NAME" -Confirm:$false `
+                              -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+        Remove-NcNetRoute -Destination 0.0.0.0/0 -Gateway $Global:config.VMsLIF.lif0.Gateway  `
+                          -Metric 20 -VserverContext "$SVM_NAME" -Confirm:$false `
+                          -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
         }
-
         # Create the Lifs
         # Get the Nodes of the HA
-        $Nodes = Get-NcNode
-        $CurrentRoute = Get-NcNetRoute -Vserver "$SVM_NAME"
+        $Nodes = Get-NcNode -ErrorVariable +Err -ErrorAction SilentlyContinue
+        $CurrentRoute = Get-NcNetRoute -Vserver "$SVM_NAME" -ErrorVariable +Err -ErrorAction SilentlyContinue
         if(!$CurrentRoute){
-        New-NcNetRoute -Destination 0.0.0.0/0 -Gateway $Global:config.VMsLIF.lif0.Gateway  -Metric 20 -VserverContext "$SVM_NAME" | Out-Null
+        New-NcNetRoute -Destination 0.0.0.0/0 -Gateway $Global:config.VMsLIF.lif0.Gateway `
+                       -Metric 20 -VserverContext "$SVM_NAME" `
+                       -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
         }
 
         #DataStoreLif for iSCSI and NFS
-        #This LIF also is used for Sharing the vdbench files to all VMs. 
+        #This LIF also is used for Sharing the vdbench files to all VMs for iSCSI/NFS and FCP. 
         New-NcNetInterface -Name $Global:config.VMsLIF.lif0.Name `
                            -Vserver "$SVM_NAME" -Role data -Node $Nodes[0].Node `
                            -Port $Global:config.VMsLIF.lif0.Port -DataProtocols nfs `
                            -Address $Global:config.VMsLIF.lif0.IP `
                            -Netmask $Global:config.VMsLIF.lif0.Netmask `
-                           -FirewallPolicy data -AdministrativeStatus up | Out-Null
-
-
-        if($SVM_Prexis -eq "FCP"){
-
+                           -FirewallPolicy data -AdministrativeStatus up `
+                           -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+        #Creating FCP LIF
+        if($SVM_Prefix -eq "FCP"){
           # Create the Lifs
           # Get the Nodes of the HA
-          $Nodes = Get-NcNode
+          $Nodes = Get-NcNode -ErrorVariable +Err -ErrorAction SilentlyContinue
           #DataStoreLif for FCP
           New-NcNetInterface -Name $Global:config.VMsLIF.lif1.Name `
                    -Vserver "$SVM_NAME" -Role data -Node $Nodes[0].Node `
                    -Port $Global:config.VMsLIF.lif1.Port -DataProtocols fcp `
-                   -AdministrativeStatus up | Out-Null
-
+                   -AdministrativeStatus up `
+                   -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
         }
 
-
+    #Adding Error to Log File
+    if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
+#Logging hass been added to all commands
+Function DataLifsSVM($SVM_Prefix) {
 
-Function DataLifsSVM($SVM_Prexis) {
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
 
-$SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
+
+$SVM_NAME = $Global:config.SVM.Name+"_"+$SVM_Prefix
 
 #Delete the Lifs in case the Script was run before. 
 $CurrentLifs = Get-NcNetInterface -Vserver "$SVM_NAME" -Name "$SVM_NAME*"
 if($CurrentLifs.Count -gt 0){
-
-Set-NcNetInterface -Name "$SVM_NAME*" -Vserver "$SVM_NAME" -AdministrativeStatus down -Confirm:$false | Out-Null
-Remove-NcNetInterface -Name "$SVM_NAME*" -Vserver "$SVM_NAME" -Confirm:$false | Out-Null
-Remove-NcNetRoute -Destination 0.0.0.0/0 -Gateway $Global:config.VMsLIF.lif0.Gateway  -Metric 20 -VserverContext "$SVM_NAME" -Confirm:$false | Out-Null
- 
-
+    Set-NcNetInterface -Name "$SVM_NAME*" -Vserver "$SVM_NAME" `
+                       -AdministrativeStatus down -Confirm:$false `
+                       -ErrorVariable Err -ErrorAction SilentlyContinue | Out-Null
+    Remove-NcNetInterface -Name "$SVM_NAME*" -Vserver "$SVM_NAME" -Confirm:$false `
+                          -ErrorVariable +Err -ErrorAction SilentlyContinue ` | Out-Null
+    Remove-NcNetRoute -Destination 0.0.0.0/0 -Gateway $Global:config.VMsLIF.lif0.Gateway `
+                      -Metric 20 -VserverContext "$SVM_NAME" -Confirm:$false `
+                      -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
 }
 
 # Create the Lifs
 # Get the Nodes of the HA
 $Nodes = Get-NcNode 
 $CurrentRoute = Get-NcNetRoute -Vserver "$SVM_NAME"
+
 if(!$CurrentRoute){
-New-NcNetRoute -Destination 0.0.0.0/0 -Gateway $Global:config.VMsLIF.lif0.Gateway  -Metric 20 -VserverContext "$SVM_NAME" | Out-Null
+    New-NcNetRoute -Destination 0.0.0.0/0 -Gateway $Global:config.VMsLIF.lif0.Gateway  -Metric 20 -VserverContext "$SVM_NAME" | Out-Null
 }
-  if($SVM_Prexis -eq "NFS"){
+  
+if($SVM_Prefix -eq "NFS"){
     #DataLifs NFS
-    New-NcNetInterface -Name $Global:config.LIFSNFS.lif1.Name -Vserver "$SVM_NAME" -Role data -Node $Nodes[0].Node -Port $Global:config.LIFSNFS.lif1.Port -DataProtocols $SVM_Prexis.ToLower() -Address $Global:config.LIFSNFS.lif1.IP -Netmask $Global:config.LIFSNFS.lif1.Netmask -FirewallPolicy data -AdministrativeStatus up | Out-Null
-    New-NcNetInterface -Name $Global:config.LIFSNFS.lif2.Name -Vserver "$SVM_NAME" -Role data -Node $Nodes[0].Node -Port $Global:config.LIFSNFS.lif2.Port -DataProtocols $SVM_Prexis.ToLower() -Address $Global:config.LIFSNFS.lif2.IP -Netmask $Global:config.LIFSNFS.lif2.Netmask -FirewallPolicy data -AdministrativeStatus up | Out-Null
-    New-NcNetInterface -Name $Global:config.LIFSNFS.lif3.Name -Vserver "$SVM_NAME" -Role data -Node $Nodes[1].Node -Port $Global:config.LIFSNFS.lif3.Port -DataProtocols $SVM_Prexis.ToLower() -Address $Global:config.LIFSNFS.lif3.IP -Netmask $Global:config.LIFSNFS.lif3.Netmask -FirewallPolicy data -AdministrativeStatus up | Out-Null
-    New-NcNetInterface -Name $Global:config.LIFSNFS.lif4.Name -Vserver "$SVM_NAME" -Role data -Node $Nodes[1].Node -Port $Global:config.LIFSNFS.lif4.Port -DataProtocols $SVM_Prexis.ToLower() -Address $Global:config.LIFSNFS.lif4.IP -Netmask $Global:config.LIFSNFS.lif4.Netmask -FirewallPolicy data -AdministrativeStatus up | Out-Null
-    }elseif($SVM_Prexis -eq "iSCSI"){
+    New-NcNetInterface -Name $Global:config.LIFSNFS.lif1.Name -Vserver "$SVM_NAME" `
+                       -Role data -Node $Nodes[0].Node -Port $Global:config.LIFSNFS.lif1.Port `
+                       -DataProtocols $SVM_Prefix.ToLower() -Address $Global:config.LIFSNFS.lif1.IP `
+                       -Netmask $Global:config.LIFSNFS.lif1.Netmask -FirewallPolicy data -AdministrativeStatus up `
+                       -ErrorVariable Err -ErrorAction SilentlyContinue | Out-Null
+    New-NcNetInterface -Name $Global:config.LIFSNFS.lif2.Name -Vserver "$SVM_NAME" `
+                       -Role data -Node $Nodes[0].Node -Port $Global:config.LIFSNFS.lif2.Port `
+                       -DataProtocols $SVM_Prefix.ToLower() -Address $Global:config.LIFSNFS.lif2.IP `
+                       -Netmask $Global:config.LIFSNFS.lif2.Netmask -FirewallPolicy data -AdministrativeStatus up `
+                       -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+    New-NcNetInterface -Name $Global:config.LIFSNFS.lif3.Name -Vserver "$SVM_NAME" `
+                       -Role data -Node $Nodes[1].Node -Port $Global:config.LIFSNFS.lif3.Port `
+                       -DataProtocols $SVM_Prefix.ToLower() -Address $Global:config.LIFSNFS.lif3.IP `
+                       -Netmask $Global:config.LIFSNFS.lif3.Netmask -FirewallPolicy data -AdministrativeStatus up `
+                       -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+    New-NcNetInterface -Name $Global:config.LIFSNFS.lif4.Name -Vserver "$SVM_NAME" `
+                       -Role data -Node $Nodes[1].Node -Port $Global:config.LIFSNFS.lif4.Port `
+                       -DataProtocols $SVM_Prefix.ToLower() -Address $Global:config.LIFSNFS.lif4.IP `
+                       -Netmask $Global:config.LIFSNFS.lif4.Netmask -FirewallPolicy data -AdministrativeStatus up `
+                       -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+    }elseif($SVM_Prefix -eq "iSCSI"){
     #Datalifs iSCSI
-    New-NcNetInterface -Name $Global:config.LIFSiSCSI.lif5.Name -Vserver "$SVM_NAME" -Role data -Node $Nodes[0].Node -Port $Global:config.LIFSiSCSI.lif5.Port -DataProtocols $SVM_Prexis.ToLower() -Address $Global:config.LIFSiSCSI.lif5.IP -Netmask $Global:config.LIFSiSCSI.lif5.Netmask -FirewallPolicy data -AdministrativeStatus up | Out-Null
-    New-NcNetInterface -Name $Global:config.LIFSiSCSI.lif6.Name -Vserver "$SVM_NAME" -Role data -Node $Nodes[0].Node -Port $Global:config.LIFSiSCSI.lif6.Port -DataProtocols $SVM_Prexis.ToLower() -Address $Global:config.LIFSiSCSI.lif6.IP -Netmask $Global:config.LIFSiSCSI.lif6.Netmask -FirewallPolicy data -AdministrativeStatus up | Out-Null
-    New-NcNetInterface -Name $Global:config.LIFSiSCSI.lif7.Name -Vserver "$SVM_NAME" -Role data -Node $Nodes[1].Node -Port $Global:config.LIFSiSCSI.lif7.Port -DataProtocols $SVM_Prexis.ToLower() -Address $Global:config.LIFSiSCSI.lif7.IP -Netmask $Global:config.LIFSiSCSI.lif7.Netmask -FirewallPolicy data -AdministrativeStatus up | Out-Null
-    New-NcNetInterface -Name $Global:config.LIFSiSCSI.lif8.Name -Vserver "$SVM_NAME" -Role data -Node $Nodes[1].Node -Port $Global:config.LIFSiSCSI.lif8.Port -DataProtocols $SVM_Prexis.ToLower() -Address $Global:config.LIFSiSCSI.lif8.IP -Netmask $Global:config.LIFSiSCSI.lif8.Netmask -FirewallPolicy data -AdministrativeStatus up | Out-Null
-    Add-NciSCSIService -VserverContext "$SVM_NAME" | Out-Null
-    }elseif($SVM_Prexis -eq "FCP"){
+    New-NcNetInterface -Name $Global:config.LIFSiSCSI.lif5.Name -Vserver "$SVM_NAME" `
+                       -Role data -Node $Nodes[0].Node -Port $Global:config.LIFSiSCSI.lif5.Port `
+                       -DataProtocols $SVM_Prefix.ToLower() -Address $Global:config.LIFSiSCSI.lif5.IP `
+                       -Netmask $Global:config.LIFSiSCSI.lif5.Netmask -FirewallPolicy data -AdministrativeStatus up `
+                       -ErrorVariable Err -ErrorAction SilentlyContinue | Out-Null
+    New-NcNetInterface -Name $Global:config.LIFSiSCSI.lif6.Name -Vserver "$SVM_NAME" `
+                       -Role data -Node $Nodes[0].Node -Port $Global:config.LIFSiSCSI.lif6.Port `
+                       -DataProtocols $SVM_Prefix.ToLower() -Address $Global:config.LIFSiSCSI.lif6.IP `
+                       -Netmask $Global:config.LIFSiSCSI.lif6.Netmask -FirewallPolicy data -AdministrativeStatus up `
+                       -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+    New-NcNetInterface -Name $Global:config.LIFSiSCSI.lif7.Name -Vserver "$SVM_NAME" `
+                       -Role data -Node $Nodes[1].Node -Port $Global:config.LIFSiSCSI.lif7.Port `
+                       -DataProtocols $SVM_Prefix.ToLower() -Address $Global:config.LIFSiSCSI.lif7.IP `
+                       -Netmask $Global:config.LIFSiSCSI.lif7.Netmask -FirewallPolicy data -AdministrativeStatus up `
+                       -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+    New-NcNetInterface -Name $Global:config.LIFSiSCSI.lif8.Name -Vserver "$SVM_NAME" `
+                       -Role data -Node $Nodes[1].Node -Port $Global:config.LIFSiSCSI.lif8.Port `
+                       -DataProtocols $SVM_Prefix.ToLower() -Address $Global:config.LIFSiSCSI.lif8.IP `
+                       -Netmask $Global:config.LIFSiSCSI.lif8.Netmask -FirewallPolicy data -AdministrativeStatus up `
+                       -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+    Add-NciSCSIService -VserverContext "$SVM_NAME" -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+    }elseif($SVM_Prefix -eq "FCP"){
     #Datalifs FCP
-    New-NcNetInterface -Name $Global:config.LIFSFC.lif9.Name -Vserver "$SVM_NAME" -Role data -Node $Nodes[0].Node -Port $Global:config.LIFSFC.lif9.Port -DataProtocols $SVM_Prexis.ToLower() -AdministrativeStatus up | Out-Null
-    New-NcNetInterface -Name $Global:config.LIFSFC.lif10.Name -Vserver "$SVM_NAME" -Role data -Node $Nodes[0].Node -Port $Global:config.LIFSFC.lif10.Port -DataProtocols $SVM_Prexis.ToLower() -AdministrativeStatus up | Out-Null
-    New-NcNetInterface -Name $Global:config.LIFSFC.lif11.Name -Vserver "$SVM_NAME" -Role data -Node $Nodes[1].Node -Port $Global:config.LIFSFC.lif11.Port -DataProtocols $SVM_Prexis.ToLower() -AdministrativeStatus up | Out-Null
-    New-NcNetInterface -Name $Global:config.LIFSFC.lif12.Name -Vserver "$SVM_NAME" -Role data -Node $Nodes[1].Node -Port $Global:config.LIFSFC.lif12.Port -DataProtocols $SVM_Prexis.ToLower() -AdministrativeStatus up | Out-Null
-    Add-NcFcpService -VserverContext "$SVM_NAME" | Out-Null
+    New-NcNetInterface -Name $Global:config.LIFSFC.lif9.Name -Vserver "$SVM_NAME" `
+                       -Role data -Node $Nodes[0].Node -Port $Global:config.LIFSFC.lif9.Port `
+                       -DataProtocols $SVM_Prefix.ToLower() -AdministrativeStatus up `
+                       -ErrorVariable Err -ErrorAction SilentlyContinue | Out-Null
+    New-NcNetInterface -Name $Global:config.LIFSFC.lif10.Name -Vserver "$SVM_NAME" `
+                       -Role data -Node $Nodes[0].Node -Port $Global:config.LIFSFC.lif10.Port `
+                       -DataProtocols $SVM_Prefix.ToLower() -AdministrativeStatus up `
+                       -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+    New-NcNetInterface -Name $Global:config.LIFSFC.lif11.Name -Vserver "$SVM_NAME" `
+                       -Role data -Node $Nodes[1].Node -Port $Global:config.LIFSFC.lif11.Port `
+                       -DataProtocols $SVM_Prefix.ToLower() -AdministrativeStatus up `
+                       -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+    New-NcNetInterface -Name $Global:config.LIFSFC.lif12.Name -Vserver "$SVM_NAME" `
+                       -Role data -Node $Nodes[1].Node -Port $Global:config.LIFSFC.lif12.Port `
+                       -DataProtocols $SVM_Prefix.ToLower() -AdministrativeStatus up `
+                       -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+    Add-NcFcpService -VserverContext "$SVM_NAME" -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
     }
-
-  Add-NcNfsService -VserverContext "$SVM_NAME" | Out-Null
-
+  Add-NcNfsService -VserverContext "$SVM_NAME" -ErrorVariable Err -ErrorAction SilentlyContinue | Out-Null
+  #Adding Error to Log File $Err or $Error
+  if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
+  
 }
+#Logging hass been added to all commands
+Function Mount-iSCSI-FCP-Datastore2($SVM_Prefix){
 
-Function Mount-iSCSI-FCP-Datastore2($SVM_Prexis){
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
 
-if(($SVM_Prexis -eq "iSCSI") -or ($SVM_Prexis -eq "NFS")){
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
 
-$DataStoreName = $Global:config.VMsLIF.lif0.Name
-
-}elseif($SVM_Prexis -eq "FCP"){
-
+if(($SVM_Prefix -eq "iSCSI") -or ($SVM_Prefix -eq "NFS")){
+    $DataStoreName = $Global:config.VMsLIF.lif0.Name
+}elseif($SVM_Prefix -eq "FCP"){
 $DataStoreName = $Global:config.VMsLIF.lif1.Name
-
 }
 
-
-$SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
-$LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreName
-$LunID = [int]$Global:config.Other.LunID
+    $SVM_NAME = $Global:config.SVM.Name+"_"+$SVM_Prefix
+    $LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreName `
+                                    -ErrorVariable Err -ErrorAction SilentlyContinue
+    $LunID = [int]$Global:config.Other.LunID
 
 
     while($LifStatus.OpStatus -eq "down"){
     
-    Write-Warning "DATA LIFS are Operational down, Check $SVM_Prexis connectivity, Otherwise type <Ctrl><C> if you want to exit the script"
-    Read-Host "Press ENTER to check connectivity again...."  
-    Write-Host "Checking $SVM_Prexis connectivity...." -ForegroundColor Green
-    $LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreName
+        Write-Log "DATA LIFS are Operational down, Check $SVM_Prefix connectivity " -Path $LogFileName -Level Warn
+        Read-Host "Press ENTER to check connectivity again....Otherwise type <Ctrl><C> if you want to exit the script"
+        Write-Log "Press ENTER to check connectivity again....Otherwise type <Ctrl><C> if you want to exit the script" -Path $LogFileName -Level Warn  
+        Write-Log "Checking $SVM_Prefix connectivity...." -Path $LogFileName -Level Info
+        $LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreName
     
-
     }
 
+    if($LifStatus.OpStatus -eq "up"){
 
+        $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
+        $AggrName = $DataAggr[0].Name
+        $Path = '/vol/'+$DataStoreName+'/'+$DataStoreName
+        #Calculating the size of the Datastore based on the number of VMs needed.
+        $NumberVMperhost = $Global:config.Other.NumberVMperhost
+        $HostCount = $Global:config.Hosts.Count
+        $Storagesize = 40*$NumberVMperhost*$HostCount
+        $DatastoreSize = [string]$Storagesize+'GB'
+        $StorageLunsize = $Storagesize*0.90
+        $DatastoreLunSize = [string]$StorageLunsize+'GB'
 
-  if($LifStatus.OpStatus -eq "up"){
-
-    $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
-    $AggrName = $DataAggr[0].Name
-    $Path = '/vol/'+$DataStoreName+'/'+$DataStoreName
-    #Calculating the size of the Datastore based on the number of VMs needed.
-    $NumberVMperhost = $Global:config.Other.NumberVMperhost
-    $HostCount = $Global:config.Hosts.Count
-    $Storagesize = 40*$NumberVMperhost*$HostCount
-    $DatastoreSize = [string]$Storagesize+'GB'
-    $StorageLunsize = $Storagesize*0.90
-    $DatastoreLunSize = [string]$StorageLunsize+'GB'
-
-    Write-Host "Creating $SVM_Prexis LUN $DataStoreName in aggregate $AggrName -Size $DatastoreSize" -ForegroundColor Green
-    New-NcVol -Name $DataStoreName -Aggregate $AggrName -Size $DatastoreSize -JunctionPath $Null -State "online" -VserverContext "$SVM_NAME" -SnapshotPolicy 'none' -SnapshotReserve 0 | Out-Null
-    Get-NcVol -Name $DataStoreName | Set-NcVolOption -Key guarantee -Value none
-    New-NcLun -Path $Path -Size $DatastoreLunSize -OsType 'vmware' -VserverContext $SVM_NAME -ThinProvisioningSupportEnabled | Out-Null
+        Write-Log "Creating $SVM_Prefix LUN $DataStoreName in aggregate $AggrName -Size $DatastoreSize" -Path $LogFileName -Level Info
+        New-NcVol -Name $DataStoreName -Aggregate $AggrName -Size $DatastoreSize `
+                  -JunctionPath $Null -State "online" -VserverContext "$SVM_NAME" `
+                  -SnapshotPolicy 'none' -SnapshotReserve 0 `
+                  -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+        Get-NcVol -Name $DataStoreName -ErrorVariable +Err -ErrorAction SilentlyContinue | Set-NcVolOption -Key guarantee -Value none
+        New-NcLun -Path $Path -Size $DatastoreLunSize -OsType 'vmware' -VserverContext $SVM_NAME -ThinProvisioningSupportEnabled `
+                  -ErrorVariable +Err -ErrorAction SilentlyContinue| Out-Null
 
   
-  if($SVM_Prexis -eq "iSCSI"){
-  #Adding iSCSI Target on ESXi Servers
-  $Protocol = "iscsi"
-             foreach($ESXiserver in $Global:config.Hosts.GetEnumerator()){
-                    foreach($iSCSILIF in $Global:config.LIFSiSCSI.GetEnumerator()){
-                            $iSCSITarget = Get-IScsiHbaTarget -Address $iSCSILIF.Value.IP -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
-                            if(!$iSCSITarget){
-                            Write-Host "Adding iSCSI Target on ESXi Servers: " -ForegroundColor Green
-                            Get-VMHost -Name $ESXiserver.Value.Name | Get-VMHostHba -Type iScsi -WarningAction SilentlyContinue | New-IScsiHbaTarget -Address $iSCSILIF.Value.IP -WarningAction silentlyContinue -ErrorAction Ignore | Out-Null
-                            }      
-                    }
-            }
+    if($SVM_Prefix -eq "iSCSI"){
+      #Adding iSCSI Target on ESXi Servers
+      $Protocol = "iscsi"
+                 foreach($ESXiserver in $Global:config.Hosts.GetEnumerator()){
+                        foreach($iSCSILIF in $Global:config.LIFSiSCSI.GetEnumerator()){
+                                $iSCSITarget = Get-IScsiHbaTarget -Address $iSCSILIF.Value.IP `
+                                                                   -ErrorVariable +Err -ErrorAction SilentlyContinue
+                                if(!$iSCSITarget){
+                                Write-Log "Adding iSCSI Target on ESXi Servers: " -Path $LogFileName -Level Info
+                                Get-VMHost -Name $ESXiserver.Value.Name | Get-VMHostHba -Type iScsi -WarningAction SilentlyContinue | New-IScsiHbaTarget -Address $iSCSILIF.Value.IP -WarningAction silentlyContinue -ErrorAction SilentlyContinue | Out-Null
+                                }      
+                        }
+                 }
 
-  }elseif($SVM_Prexis -eq "FCP"){
-  
-  $Protocol = "fcp"
-  
-  }
+  }elseif($SVM_Prefix -eq "FCP"){
+        $Protocol = "fcp"
+     }
 
   #Create the igroup
-    New-NcIgroup 'vdbench' -Protocol $Protocol -Type 'vmware' -VserverContext $SVM_NAME | Out-Null
-    Write-Host 'Creating igroup called vdbench ' -ForegroundColor Green
-    Add-NcLunMap -Path $Path -InitiatorGroup 'vdbench' -Id $LunID -VserverContext $SVM_NAME | Out-Null
+    New-NcIgroup -Name 'vdbench' -Protocol $Protocol -Type 'vmware' -VserverContext $SVM_NAME `
+                 -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+    Write-Log 'Creating igroup called vdbench ' -Path $LogFileName -Level Info
+    Add-NcLunMap -Path $Path -InitiatorGroup 'vdbench' -Id $LunID -VserverContext $SVM_NAME `
+                 -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
   #Adding IQN to the igroup named vdbench
       foreach ($ESXiHost in $Global:config.Hosts.GetEnumerator()) {
-        $H = Get-VMhost $ESXiHost.Value.Name   
+        $H = Get-VMhost $ESXiHost.Value.Name -ErrorVariable +Err -ErrorAction SilentlyContinue
 
-        if($SVM_Prexis -eq "iSCSI"){
-        Write-Host "Getting IQN for $H" -ForegroundColor Green
-        $hostview = Get-View $H.id
-        $storage = Get-View $hostview.ConfigManager.StorageSystem
-        $IQN = $storage.StorageDeviceInfo.HostBusAdapter.iScsiName      
-        Add-NcIgroupInitiator -Name 'vdbench' -Initiator $IQN -VserverContext $SVM_NAME | Out-Null
-        Write-Host "Adding IQN for $H to vdbench igroup" -ForegroundColor Green
-        }elseif($SVM_Prexis -eq "FCP"){
-                Write-Host "Getting WWN for $H" -ForegroundColor Green
+        if($SVM_Prefix -eq "iSCSI"){
+            Write-Log "Getting IQN for $H" -Path $LogFileName -Level Info
+            $hostview = Get-View $H.id
+            $storage = Get-View $hostview.ConfigManager.StorageSystem
+            $IQN = $storage.StorageDeviceInfo.HostBusAdapter.iScsiName      
+            Add-NcIgroupInitiator -Name 'vdbench' -Initiator $IQN -VserverContext $SVM_NAME `
+                                  -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+        Write-Log "Adding IQN for $H to vdbench igroup" -Path $LogFileName -Level Info
+        }elseif($SVM_Prefix -eq "FCP"){
+                Write-Log "Getting WWN for $H" -Path $LogFileName -Level Info
                 $WWN = Get-VMHostHBA -VMHost $H -Type FibreChannel | Select VMHost,Device,@{N="WWN";E={"{0:X}" -f $_.PortWorldWideName}}
 
                     foreach($WWn in $WWN){
-                    Add-NcIgroupInitiator -Name 'vdbench' -Initiator $WWn.WWN -VserverContext $SVM_NAME | Out-Null
-                    Write-Host "Adding WWN for $H to vdbench igroup" -ForegroundColor Green
+                    Add-NcIgroupInitiator -Name 'vdbench' -Initiator $WWn.WWN -VserverContext $SVM_NAME `
+                                          -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+                    Write-Log "Adding WWN for $H to vdbench igroup" -Path $LogFileName -Level Info
                     }
         }
-        
-
-
      }            
-
 
      do{
 
@@ -970,7 +1213,7 @@ $LunID = [int]$Global:config.Other.LunID
         foreach($H in $Global:config.Hosts.GetEnumerator()){
  
                 $HostName = $H.Value.Name
-                Write-Host "Refreshing HBAs on ESXi Server: $HostName" -ForegroundColor Green
+                Write-Log "Refreshing HBAs on ESXi Server: $HostName" -Path $LogFileName -Level Info
                 Get-VMHostStorage -VMHost $HostName -Refresh -RescanAllHba | Out-Null
  
         }
@@ -980,24 +1223,30 @@ $LunID = [int]$Global:config.Other.LunID
         $LunIDString = $LunID.ToString() #Lun ID
         $H = $Global:config.Hosts.Host00.Name    
         $H = Get-VMhost $H -WarningAction SilentlyContinue
-        Write-Host "Creating $SVM_Prexis Datastore for $H" -ForegroundColor Green
+        Write-Log "Creating $SVM_Prefix Datastore for $H" -Path $LogFileName -Level Info
         $LunIDReport = Get-LunID | where {($_.ESX -eq $H) -and ($_.LUNID -eq $LunIDString)}
         if($LunIDReport){
         New-Datastore -VMHost $H -Name $DataStoreName -Path $LunIDReport.Device -VMFS -WarningAction SilentlyContinue | Out-Null
         }else{
-        Write-Warning "Re-scanning the HBAs again as it failed to find LUN with ID number $LunIDString ."  
-        Write-Warning "Please check the network connectivity (type <Ctrl><C> if you want to exit the script)"        
+        Write-Log "Re-scanning the HBAs again as it failed to find LUN with ID number $LunIDString ." -Path $LogFileName -Level Warn 
+        Write-Log "Please check the network connectivity (type <Ctrl><C> if you want to exit the script)" -Path $LogFileName -Level Warn      
         }
 
 
      }while(!$LunIDReport)
 
-  }
+  }Else{
+  
+        Write-Log "Deployment Failed as DATA LIFS are Operational down, Delete and De-Deploy the environment" -Path $LogFileName -Level Error
+        Read-Host "Press ENTER to Exit...."
+        Return "DATALIFSDOWN"
+        Break
+     }
 
-
-
+     #Adding Error to Log File $Err or $Error
+    if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 }
-
+#Logging hass been added to all commands
 Function Get-LunID {
 
 $report = Get-VMHost -State Connected | %{
@@ -1029,22 +1278,39 @@ $report = Get-VMHost -State Connected | %{
 return $report
 
 }
+#Logging hass been added to all commands
+Function Mount-NFSDatastore2($SVM_Prefix) {
 
-Function Mount-NFSDatastore2($SVM_Prexis) {
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
 
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
 
-$SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
+$SVM_NAME = $Global:config.SVM.Name+"_"+$SVM_Prefix
 
-if(($SVM_Prexis -eq "iSCSI") -or ($SVM_Prexis -eq "NFS")){
+if(($SVM_Prefix -eq "iSCSI") -or ($SVM_Prefix -eq "NFS")){
 
 $DataStoreName = $Global:config.VMsLIF.lif0.Name
 
-}elseif($SVM_Prexis -eq "FCP"){
+}elseif($SVM_Prefix -eq "FCP"){
 
 $DataStoreName = $Global:config.VMsLIF.lif1.Name
 
 }
-$LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreName
+$LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreName `
+                                -ErrorVariable Err -ErrorAction SilentlyContinue
+
+   while($LifStatus.OpStatus -eq "down"){
+    
+    Write-Log "DATA LIFS are Operational down, Check $SVM_Prefix connectivity, Otherwise type <Ctrl><C> if you want to exit the script" -Path $LogFileName -Level Warn
+    Read-Host "Press ENTER to check connectivity again...."
+    Write-Log "Press ENTER to check connectivity again...." -Path $LogFileName -Level Warn  
+    Write-Log "Checking $SVM_Prefix connectivity...." -Path $LogFileName -Level Warn
+    $LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreName
+    
+    }
 
 
   if ($LifStatus.OpStatus -eq "up"){
@@ -1066,53 +1332,75 @@ $LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreNa
                 
         }else{
 
-        New-NcExportPolicy -Name "$SVM_NAME" -VserverContext "$SVM_NAME" | Out-Null
+        New-NcExportPolicy -Name "$SVM_NAME" -VserverContext "$SVM_NAME" `
+                           -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
 
         }
         $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
         $vdbenchVol = Get-NcVol -Name $DataStoreName -Vserver "$SVM_NAME"
 
                 if ($vdbenchVol){
-                Write-Warning "$DataStoreName already exist, please delete the volume and start again : "
-                Read-Host " "
-                
+                    Write-Log "$DataStoreName already exist, please delete and redeploy the environment and start again : " -Path $LogFileName -Level Error
+                    Read-Host "Press ENTER to Exit...."
+                    Return "DATALIFSDOWN"
+                    Break
                 }else{
                 
-                #This is to change the policy on the root volume so that we can map the NFS volume on VCenter
-                $attr = Get-NcVol -Template
-                Initialize-NcObjectProperty -Object $attr -Name VolumeExportAttributes | Out-Null
-                $attr.VolumeExportAttributes.Policy = "$SVM_NAME"
-                $query = Get-NcVol -Template
-                $query.Name = "vdbench_root"
-                $query.Vserver = "$SVM_NAME"
-                Update-NcVol -Query $query -Attributes $attr -FlexGroupVolume:$false | Out-Null
-                #
-                $JunctionPath = "/"+$DataStoreName
-                #Calculating the size of the Datastore based on the number of VMs needed. 
-                $NumberVMperhost = $Global:config.Other.NumberVMperhost
-                $HostCount = $Global:config.Hosts.Count
-                $Storagesize = 20*$NumberVMperhost*$HostCount
-                $DatastoreSize = [string]$Storagesize+'GB'
+                    #This is to change the policy on the root volume so that we can map the NFS volume on VCenter
+                    $attr = Get-NcVol -Template
+                    Initialize-NcObjectProperty -Object $attr -Name VolumeExportAttributes | Out-Null
+                    $attr.VolumeExportAttributes.Policy = "$SVM_NAME"
+                    $query = Get-NcVol -Template
+                    $query.Name = "vdbench_root"
+                    $query.Vserver = "$SVM_NAME"
+                    Update-NcVol -Query $query -Attributes $attr -FlexGroupVolume:$false `
+                                 -ErrorVariable +Err -ErrorAction SilentlyContinue| Out-Null
+                    #
+                    $JunctionPath = "/"+$DataStoreName
+                    #Calculating the size of the Datastore based on the number of VMs needed. 
+                    $NumberVMperhost = $Global:config.Other.NumberVMperhost
+                    $HostCount = $Global:config.Hosts.Count
+                    $Storagesize = 20*$NumberVMperhost*$HostCount
+                    $DatastoreSize = [string]$Storagesize+'GB'
 
-                New-NcVol -Name $DataStoreName -Aggregate $DataAggr[0].Name -Size $DatastoreSize -JunctionPath $JunctionPath -ExportPolicy "$SVM_NAME" -SecurityStyle "Unix" -UnixPermissions "0777" -State "online" -VserverContext "$SVM_NAME" | Out-Null
-                Get-NcVol -Name $DataStoreName | Set-NcVolOption -Key guarantee -Value none        
-                        ForEach($item in $Global:config.Hosts.GetEnumerator()){
-                        $VMHostName = $item.Value.Name
-
-                        if($Global:config.other.DSwitch){
-                        #if DSwitch is selected in the Vmware Enviroment
-                        $IPInfo = Get-VDPortGroup -Name $Global:config.Other.NetworkName | Get-VMHostNetworkAdapter -VMhost $VMHostName -WarningAction silentlyContinue
-                        }else{
-                        #if vSwitch is selected in the Vmware Enviroment
-                        $PortGroupName = $Global:config.other.PortGroupName
-                        $IPInfo = Get-VMHostNetworkAdapter -VMKernel -VMHost $VMHostName | ? {$_.PortgroupName -eq $PortGroupName} | select Name,VMhost,IP
-                               
-                        }
-
-                        New-NcExportRule -Policy "$SVM_NAME" -ClientMatch $IPInfo.IP -ReadOnlySecurityFlavor any -ReadWriteSecurityFlavor any -VserverContext "$SVM_NAME" -Protocol nfs -SuperUserSecurityFlavor any | Out-Null
+                    New-NcVol -Name $DataStoreName -Aggregate $DataAggr[0].Name -Size $DatastoreSize `
+                              -JunctionPath $JunctionPath -ExportPolicy "$SVM_NAME" -SecurityStyle "Unix" `
+                              -UnixPermissions "0777" -State "online" -VserverContext "$SVM_NAME" `
+                              -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+                    Get-NcVol -Name $DataStoreName | Set-NcVolOption -Key guarantee -Value none        
                         
-                        $NFSPath = "/"+$DataStoreName
-                        New-Datastore -Nfs -VMHost $VMHostName -Name $DataStoreName -Path $NFSPath -NfsHost $LifStatus.Address -WarningAction silentlyContinue | Out-Null
+                        #Creating the Export NFS rules for the ESXi Servers
+                        ForEach($item in $Global:config.Hosts.GetEnumerator()){
+                            
+                            $VMHostName = $item.Value.Name
+
+                            if($Global:config.other.DSwitch){
+                                #if DSwitch is selected in the Vmware Enviroment
+                                $IPInfo = Get-VDPortGroup -Name $Global:config.Other.NetworkName | Get-VMHostNetworkAdapter -VMhost $VMHostName -WarningAction silentlyContinue
+                            }else{
+                                #if vSwitch is selected in the Vmware Enviroment
+                                $PortGroupName = $Global:config.other.PortGroupName
+                                $IPInfo = Get-VMHostNetworkAdapter -VMKernel -VMHost $VMHostName | ? {$_.PortgroupName -eq $PortGroupName} | select Name,VMhost,IP   
+                            }
+                                
+                             #If VMkernel is not in the same PortGroup $IPInfo is going to be empty.
+                                if($IPInfo){
+                                    New-NcExportRule -Policy "$SVM_NAME" -ClientMatch $IPInfo.IP `
+                                                     -ReadOnlySecurityFlavor any -ReadWriteSecurityFlavor any `
+                                                     -VserverContext "$SVM_NAME" -Protocol nfs -SuperUserSecurityFlavor any `
+                                                     -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+                                }else{
+                                    
+                                    New-NcExportRule -Policy "$SVM_NAME" -ClientMatch "0.0.0.0/0" `
+                                                     -ReadOnlySecurityFlavor any -ReadWriteSecurityFlavor any `
+                                                     -VserverContext "$SVM_NAME" -Protocol nfs -SuperUserSecurityFlavor any `
+                                                     -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+                                    Write-Log -Message "NFS export is 0.0.0.0/0 since suitable VMkernels were not found." -Path $LogFileName -Level Warn        
+                                }
+                                $NFSPath = "/"+$DataStoreName
+                                New-Datastore -Nfs -VMHost $VMHostName -Name $DataStoreName -Path $NFSPath `
+                                              -NfsHost $LifStatus.Address -WarningAction silentlyContinue `
+                                              -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
 
                         }
                 
@@ -1120,13 +1408,17 @@ $LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreNa
         
      }else{
    
-            Write-Warning "Network Interface in the Controller is not UP, Check the interface and try again. Press any key to go back to the main menu "
-            Read-Host ""
+        Write-Log "Deployment Failed as DATA LIFS are Operational down, Delete and De-Deploy the environment" -Path $LogFileName -Level Error
+        Read-Host "Press ENTER to Exit...."
+        Return "DATALIFSDOWN"
+        Break
    }
 
-  Return
-}
+#Adding Error to Log File $Err or $Error
+if($Error.Count -gt 0) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
+}
+#No need for logging.. 
 Function Get-FileName($initialDirectory, [string]$ExtentionFile){
     [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null
     
@@ -1136,99 +1428,134 @@ Function Get-FileName($initialDirectory, [string]$ExtentionFile){
     $OpenFileDialog.filter = "$ExtentionFile (*.$ExtentionFile)| *.$ExtentionFile"
     $OpenFileDialog.ShowDialog() | Out-Null
     #$show = $OpenFileDialog.ShowDialog()
+    #This returns the Path of the config File to be imported 
     $OpenFileDialog.FileName
+    
+    $ConfigFile = $OpenFileDialog.FileName    
+    #Extracting the name of the configuration file path
+    $ConfigFileName = $ConfigFile.Split('\')[-1].split('.')[0]
+    #Adding the .log extention
+    $LogFileName = $ConfigFileName+'_LogFile.log'
+    #This Returns the Log File Name 
+    $LogFileName
+    
+    #This returns [Null]
+    $LogFilePath = ""
+    $LogFilePath
+    
+
 }
+#Logging hass been added to all commands
+Function Import-OVA2($CurrentPath, $SVM_Prefix){
 
-Function Import-OVA2($CurrentPath, $SVM_Prexis){
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
 
-$vdbenchtemplate = Get-Template -Name vdbench-template -ErrorAction SilentlyContinue
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
+
+$vdbenchtemplate = Get-Template -Name vdbench-template -ErrorVariable Err -ErrorAction SilentlyContinue
 
 if(-not $vdbenchtemplate){
 
-if(($SVM_Prexis -eq "iSCSI") -or ($SVM_Prexis -eq "NFS")){
+if(($SVM_Prefix -eq "iSCSI") -or ($SVM_Prefix -eq "NFS")){
 
 $DataStoreName = $Global:config.VMsLIF.lif0.Name
 
-}elseif($SVM_Prexis -eq "FCP"){
+}elseif($SVM_Prefix -eq "FCP"){
 
 $DataStoreName = $Global:config.VMsLIF.lif1.Name
 
 }
 
-
 $ESXiHost = $Global:config.Hosts.Host00.Name
-
 
 #OVA Path File.... 
 $inputova = $Global:config.Other.PathOVA
 
+do{
+
 if (!(Test-Path $inputova)) {
 
-
-        Write-Warning "$inputova absent in the Path.... "
-        Write-Warning "Please select the path to import the OVA.... "
-        $inputova = Get-FileName $CurrentPath "ova"
-                
-   }
-
-
-
-    do{
+    Write-Log "$inputova absent in the Path.... " -Path $LogFileName -Level Warn
+    Write-Log "Please select the path to import the OVA.... " -Path $LogFileName -Level Warn
+    $inputOVA_Array = Get-FileName $CurrentPath "ova"
+    # $inputova is an array
+    # $inputova[0] is the Configuratiton path.
+    $inputova = $inputOVA_Array[0]
+                    
+}
         #$inputova = Get-FileName $CurrentPath "ova" 
-        Write-Warning "Please find below the OVA file selected:"
-        Write-Host "$inputova"
-        
+        Write-Log "Please find below the OVA file selected:" -Path $LogFileName -Level Info
+        Write-Log "$inputova" -Path $LogFileName -Level Info
         #$Import_option = Read-Host "Type 'C' to Continue Importing the OVA......  "
         $Import_option = 'C'
                        if ($Import_option -eq 'C'){
                         #Import the OVA                                                         
                               if(-not (VSwitch-Check $ESXiHost)){
-                                 #Create the VSwitch.... 
-                                 $VSwitch = Get-VirtualSwitch -VMHost $ESXiHost -Standard
-                                    if(-not $VSwitch){
-                                    Write-Host "Creating a VSwitch to import OVA......" -ForegroundColor Green
-                                    New-VirtualSwitch -VMHost $ESXiHost -Name vdbench -ErrorAction SilentlyContinue | Out-Null
-                                    }
-                                    Write-Host "Creating a Port Group to import OVA......" -ForegroundColor Green
+                                    #Create the VSwitch.... 
                                     $VSwitch = Get-VirtualSwitch -VMHost $ESXiHost -Standard
-                                    New-VirtualPortGroup -VirtualSwitch $VSwitch  -Name "VM Network" -ErrorAction SilentlyContinue | Out-Null    
+                                        if(-not $VSwitch){
+                                            Write-Log "Creating a VSwitch to import OVA......" -Path $LogFileName -Level Info
+                                            New-VirtualSwitch -VMHost $ESXiHost -Name vdbench `
+                                                              -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+                                        }
+                                    Write-Log "Creating a Port Group to import OVA......" -Path $LogFileName -Level Info
+                                    $VSwitch = Get-VirtualSwitch -VMHost $ESXiHost -Standard
+                                    New-VirtualPortGroup -VirtualSwitch $VSwitch  -Name "VM Network" `
+                                                         -ErrorVariable +Err -ErrorAction SilentlyContinue| Out-Null    
                                 }
-                                 
                                  $ESXiHostInfo = Get-VMHost $ESXiHost 
-                                 Import-vApp -Source $inputova -Name vdbench-template -VMHost $ESXiHostInfo -Datastore $DataStoreName -force | Out-Null
-                                 $template = Get-VM vdbench-template | Set-VM -ToTemplate -Name vdbench-template -Confirm:$false
+                                 Import-vApp -Source $inputova -Name vdbench-template -VMHost $ESXiHostInfo -Datastore $DataStoreName -force `
+                                             -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+                                 $template = Get-VM vdbench-template | Set-VM -ToTemplate -Name vdbench-template -Confirm:$false `
+                                                                              -ErrorVariable +Err -ErrorAction SilentlyContinue
                                                 if($template -ne $null){
-                                                    Write-host "vdbench-template has been successfully created...." -ForegroundColor Green
-                                                    $continue = $true
+                                                    Write-Log "vdbench-template has been successfully created...." -Path $LogFileName -Level Info
                                                 }else{
-                                                Write-Warning "vdbench-template was not successfully created, please try again."
-                                                Read-Host
+                                                Write-Log "Deployment Failed as vdbench-template was not successfully created" -Path $LogFileName -Level Error
+                                                Read-Host "Press ENTER to check to try import again....Otherwise type <Ctrl><C> if you want to exit the script"
+                                                Write-Log "Press ENTER to check to try import again....Otherwise type <Ctrl><C> if you want to exit the script" -Path $LogFileName -Level Info
+                                                
                                                 }
                             }
-       }while($template -eq $null)                
-                        }else{
-                                Write-Warning "vdbench-template has been already imported....  "
-                               }
-}
+       }while($template -eq $null)
+       
+                     
+     }else{
+     Write-Log "vdbench-template has been already imported....  " -Path $LogFileName -Level Info
+     }
+#Adding Error to Log File $Err or $Error
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
+}
+#Logging hass been added to all commands
 Function Create-NFSVol2{
 
-$SVM_NAME1 = $Global:config.SVM.Name
-$SVM_NAME = $Global:config.SVM.Name+"NFS"
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
+
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
+
+$SVM_NAME = $Global:config.SVM.Name+"_NFS"
 $Count = 0
 do{
 
-$VMWorkers = Get-VM -Name "$SVM_NAME1*" |  ?{$_.PowerState -eq "PoweredOn"}
+$VMWorkers = Get-VM -Name "$SVM_NAME*" -ErrorVariable Err -ErrorAction SilentlyContinue |  ?{$_.PowerState -eq "PoweredOn"} 
+                    
 
 $NumberWorkers = $Global:config.VMs.Count
 
-Write-Warning "Checking that all $NumberWorkers workers are Powered ON.."
+Write-Log "Checking that all $NumberWorkers workers are Powered ON.." -Path $LogFileName -Level Info
 
 Start-Sleep 5
 
 if($Count -eq 5){
-Write-Warning "Make sure that all $NumberWorkers workers are Powered ON "
-Write-Warning "Or make sure the number of VMs per host is Correct "
+Write-Log "Make sure that all $NumberWorkers workers are Powered ON " -Path $LogFileName -Level Warn
+Write-Log "Or make sure the number of VMs per host is Correct " -Path $LogFileName -Level Warn
 $ExitEntry = Read-Host "Otherwise, type 'exit' to stop the script to delete and re-deploy...(To Continue Type any key)"
         if($ExitEntry -eq "exit") {
         return "IssuesWithVMs"
@@ -1241,10 +1568,10 @@ $Count++
 
 }while(!($VMWorkers.Length -eq $NumberWorkers))
 
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host "                   Creation of NFS Volumes                " -ForegroundColor Green
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host ""
+Write-Log "==========================================================" -Path $LogFileName -Level Info
+Write-Log "                   Creation of NFS Volumes                " -Path $LogFileName -Level Info
+Write-Log "==========================================================" -Path $LogFileName -Level Info
+Write-Log " " -Path $LogFileName -Level Info
 #Converting string to Int32
 $strNumberofVolumesPerVM = $Global:config.Other.NumberofVolumesPerVM
 $BooleanValue = $strNumberofVolumesPerVM -match "^[0-9]{1,4}"
@@ -1254,14 +1581,14 @@ $StrValue = $HasValue.Values
 
 
 $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
-    Write-Host "$NumberofVolumesPerVM $SVM_Prexis Volumes per VM will be created, and the distribution " -ForegroundColor Green
-    Write-Host "will be acrossed TWO Data Aggregates " -ForegroundColor Green
-    Write-host "Number of vdbench VMs " $Global:config.VMs.Count -ForegroundColor Green
+    Write-Log "$NumberofVolumesPerVM $SVM_Prefix Volumes per VM will be created, and the distribution " -Path $LogFileName -Level Info
+    Write-Log "will be acrossed TWO Data Aggregates " -Path $LogFileName -Level Info
+    Write-Log "Number of vdbench VMs " $Global:config.VMs.Count -Path $LogFileName -Level Info
     $NumberofVolumesPerVM = $Global:config.Other.NumberofVolumesPerVM
     $VolumeSize = $Global:config.Other.VolumeSize
     $VMCount = $Global:config.VMs.Count
     $numberVOLS = $VMCount*$NumberofVolumesPerVM
-    Write-Host "Total number of NFS Vols: " $numberVOLS -ForegroundColor Green
+    Write-Log "Total number of NFS Vols: " $numberVOLS -Path $LogFileName -Level Info
     $Continue_NFSVOLS = read-host "Please press 'c' to continue, type 'exit' to return to the main menu... "
             if($Continue_NFSVOLS -eq 'c'){
                        #Big for loop for each Host
@@ -1281,55 +1608,65 @@ $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
                                                  $VolumeName = $item.Value.Name+"_NFS_VD_vol_"+$Volume
                                                  $JunctionPath = "/"+$VolumeName
                                                  $AggrName = $DataAggr[$aggregate].Name
-                                                 Write-Host "Creating Volume $VolumeName in aggregate $AggrName -Size $VolumeSize" -ForegroundColor Green
-                                                 New-NcVol -Name $VolumeName -Aggregate $DataAggr[$aggregate].Name -Size $VolumeSize -JunctionPath $JunctionPath -ExportPolicy $item.Value.Name -SecurityStyle "Unix" -UnixPermissions "0777" -State "online" -VserverContext "$SVM_NAME" -SnapshotPolicy 'none' -SnapshotReserve 0 | Out-Null
+                                                 Write-Log "Creating Volume $VolumeName in aggregate $AggrName -Size $VolumeSize" -Path $LogFileName -Level Info
+                                                 New-NcVol -Name $VolumeName -Aggregate $DataAggr[$aggregate].Name -Size $VolumeSize `
+                                                           -JunctionPath $JunctionPath -ExportPolicy $item.Value.Name -SecurityStyle "Unix" `
+                                                           -UnixPermissions "0777" -State "online" -VserverContext "$SVM_NAME" -SnapshotPolicy 'none' `
+                                                           -SnapshotReserve 0 `
+                                                           -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
                                                   
                                                  }
                                      }
                         }
              }elseif($Continue_NFSVOLS -eq "exit"){
-             Write-Warning "You can delete what was deployed up to this point by choosing "
-             Write-Warning "the Delete option from the main Menu and selecting the config file. "
-             Return "CancelNFSVols"
-             Break
+                 Write-Log "You can delete what was deployed up to this point by choosing " -Path $LogFileName -Level Warn
+                 Write-Log "the Delete option from the main Menu and selecting the config file. " -Path $LogFileName -Level Warn
+                 Return "CancelNFSVols"
+                 Break
              }else{
-             Write-Warning "Creation of the NFS Vols was stopped, you can delete what was deployed up to this point by choosing "
-             Write-Warning "the Delete option from the main Menu and selecting the config file. "
-             Return "CancelNFSVols"
-             Break
-             } 
+                Write-Log "Creation of the NFS Vols was stopped, you can delete what was deployed up to this point by choosing " -Path $LogFileName -Level Warn
+                Write-Log "the Delete option from the main Menu and selecting the config file. " -Path $LogFileName -Level Warn
+                Return "CancelNFSVols"
+                Break
+             }
 
+#Adding Error to Log File $Err or $Error
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 }
+#Logging hass been added to all commands
+Function Create-iSCSI-FC-Lun2($SVM_Prefix){
 
-Function Create-iSCSI-FC-Lun2($SVM_Prexis){
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
 
-$SVM_NAME1 = $Global:config.SVM.Name
-$SVM_NAME = $Global:config.SVM.Name+"$SVM_Prexis"
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
+
+$SVM_NAME = $Global:config.SVM.Name+"_"+$SVM_Prefix
 $LunID = [int]$Global:config.Other.LunID
 $Count = 0
 
+Write-Log "Checking that all $NumberWorkers workers are Powered ON.."  -Path $LogFileName -Level Info
+
 do{
 
-$VMWorkers = Get-VM -Name "$SVM_NAME1*" |  ?{$_.PowerState -eq "PoweredOn"}
+$VMWorkers = Get-VM -Name "$SVM_NAME*" -ErrorVariable Err -ErrorAction SilentlyContinue |  ?{$_.PowerState -eq "PoweredOn"}
 
 $NumberWorkers = $Global:config.VMs.Count
+Start-Sleep 1
 
-Write-Warning "Checking that all $NumberWorkers workers are Powered ON.."
+if($Count -eq 10){
 
-if($Count -eq 100){
-
-Write-Warning "Make sure that all $NumberWorkers workers are Powered ON "
-Write-Warning "Or make sure the number of VMs per host is Correct "
+Write-Log "Make sure that all $NumberWorkers workers are Powered ON "  -Path $LogFileName -Level Warn
+Write-Log "Or make sure the number of VMs per host is Correct "  -Path $LogFileName -Level Warn
 $ExitEntry = Read-Host "Otherwise, type 'exit' to stop the script to delete and re-deploy...(To Continue Type any key)"
 if($ExitEntry -eq "exit") {
 return "IssuesWithVMs"
 break
 
 }
-
-
 $Count = 0
-
 }
 
 $Count++
@@ -1337,10 +1674,10 @@ $Count++
 }while(!($VMWorkers.Length -eq $NumberWorkers))
 
 
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host "               Creation of $SVM_Prexis LUNs               " -ForegroundColor Green
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host ""
+Write-Log "==========================================================" -Path $LogFileName -Level Info
+Write-Log "               Creation of $SVM_Prefix LUNs               " -Path $LogFileName -Level Info
+Write-Log "==========================================================" -Path $LogFileName -Level Info
+Write-Log " " -Path $LogFileName -Level Info
 #Converting string to Int32
 $strNumberofVolumesPerVM = $Global:config.Other.NumberofVolumesPerVM
 $BooleanValue = $strNumberofVolumesPerVM -match "^[0-9]{1,4}"
@@ -1349,9 +1686,9 @@ $StrValue = $HasValue.Values
 [int]$NumberofVolumesPerVM = [convert]::ToInt32($StrValue, 10)
 
 $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
-    Write-Host "$NumberofVolumesPerVM $SVM_Prexis LUNs per VM will be created, and the distribution " -ForegroundColor Green
-    Write-Host "will be acrossed TWO Data Aggregates " -ForegroundColor Green
-    Write-host "Number of vdbench VMs " $Global:config.VMs.Count -ForegroundColor Green
+    Write-Log "$NumberofVolumesPerVM $SVM_Prefix LUNs per VM will be created, and the distribution " -Path $LogFileName -Level Info
+    Write-Log "will be acrossed TWO Data Aggregates " -Path $LogFileName -Level Info
+    Write-Log "Number of vdbench VMs " $Global:config.VMs.Count -Path $LogFileName -Level Info
     
     $VolumeSize = $Global:config.Other.VolumeSize
     $BooleanValue = $VolumeSize -match "^[0-9]{1,4}"
@@ -1364,7 +1701,7 @@ $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
     $FlexVolSize = [string]$FlexVolSize+'GB'
     $VMCount = $Global:config.VMs.Count
     $numberVOLS = $VMCount*$NumberofVolumesPerVM
-    Write-Host "Total number of $SVM_Prexis LUNs: " $numberVOLS -ForegroundColor Green
+    Write-Log "Total number of $SVM_Prefix LUNs: " $numberVOLS -Path $LogFileName -Level Info
     $Continue_LUNsVOLS = read-host "Please press 'c' to continue, type 'exit' to return to the main menu... "
             if($Continue_LUNsVOLS -eq 'c'){
                        #Big for loop for each Host
@@ -1382,14 +1719,19 @@ $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
                                                                       $aggregate++
                                                                      }
                                                               }
-                                                 $VolumeName = $item.Value.Name+"_"+$SVM_Prexis+"_VD_vol_"+$Volume
+                                                 $VolumeName = $item.Value.Name+"_"+$SVM_Prefix+"_VD_vol_"+$Volume
                                                  $Path = '/vol/'+$VolumeName+'/'+$VolumeName
                                                  $JunctionPath = $null
                                                  $AggrName = $DataAggr[$aggregate].Name
-                                                 Write-Host "Creating $SVM_Prexis LUN $VolumeName in aggregate $AggrName -Size $VolumeSize" -ForegroundColor Green
-                                                 New-NcVol -Name $VolumeName -Aggregate $DataAggr[$aggregate].Name -Size $FlexVolSize -JunctionPath $JunctionPath -State "online" -VserverContext "$SVM_NAME" -SnapshotPolicy 'none' -SnapshotReserve 0 | Out-Null
-                                                 New-NcLun -Path $Path -Size $LunVolSize -OsType 'linux' -VserverContext $SVM_NAME | Out-Null
-                                                 Add-NcLunMap -Path $Path -InitiatorGroup 'vdbench' -Id $LunID -VserverContext $SVM_NAME | Out-Null
+                                                 Write-Log "Creating $SVM_Prefix LUN $VolumeName in aggregate $AggrName -Size $VolumeSize" -Path $LogFileName -Level Info
+                                                 New-NcVol -Name $VolumeName -Aggregate $DataAggr[$aggregate].Name -Size $FlexVolSize `
+                                                           -JunctionPath $JunctionPath -State "online" -VserverContext "$SVM_NAME" `
+                                                           -SnapshotPolicy 'none' -SnapshotReserve 0 `
+                                                           -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+                                                 New-NcLun -Path $Path -Size $LunVolSize -OsType 'linux' -VserverContext $SVM_NAME `
+                                                           -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+                                                 Add-NcLunMap -Path $Path -InitiatorGroup 'vdbench' -Id $LunID -VserverContext $SVM_NAME `
+                                                              -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
                                                  $LunID++
 
 
@@ -1397,13 +1739,13 @@ $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
                                 }
                        }
               }elseif($Continue_LUNsVOLS -eq "exit"){
-              Write-Warning "You can delete what was deployed up to this point by choosing "
-              Write-Warning "the Delete option from the main Menu and selecting the config file. "
+              Write-Log "You can delete what was deployed up to this point by choosing "  -Path $LogFileName -Level Warn
+              Write-Log "the Delete option from the main Menu and selecting the config file. " -Path $LogFileName -Level Warn
               Return "CancelLunsVols"
               Break
              }else{
-              Write-Warning "Creation of the LUNs Vols was stopped, you can delete what was deployed up to this point by choosing "
-              Write-Warning "the Delete option from the main Menu and selecting the config file. "
+              Write-Log "Creation of the LUNs Vols was stopped, you can delete what was deployed up to this point by choosing " -Path $LogFileName -Level Warn
+              Write-Log "the Delete option from the main Menu and selecting the config file. " -Path $LogFileName -Level Warn
               Return "CancelLunsVols"
               Break
              }
@@ -1414,15 +1756,24 @@ $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
 foreach($H in $Global:config.Hosts.GetEnumerator()){
  
 $HostName = $H.Value.Name
-Write-Host "Refreshing HBAs on ESXi Server: $HostName" -ForegroundColor Green
+Write-Log "Refreshing HBAs on ESXi Server: $HostName" -Path $LogFileName -Level Info
 Get-VMHostStorage -VMHost $HostName -Refresh -RescanAllHba | Out-Null
  
  }
 
+#Adding Error to Log File $Err or $Error
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
  }
-
+#Logging hass been added to all commands
 Function Create-RDMLun2{
+
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
+
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
 
 $LunIDReport = Get-LunID
 $LunID = [int]$Global:config.Other.LunID
@@ -1445,8 +1796,9 @@ foreach($vdbenchVMs in $Global:config.VMs.GetEnumerator()){
         $LunString = $LunID.ToString()
         $LunInfo = $LunIDReport | where {($_.ESX -eq $HostServer) -and $_.LUNID -eq $LunString}
         $DeviceName = "/vmfs/devices/disks/"+$LunInfo.Device
-        New-HardDisk -VM $VMObject -DiskType RawPhysical -DeviceName $DeviceName -Controller "SCSI controller 0" -WarningAction SilentlyContinue | Out-Null
-        Write-Host "Creating RDM in $VM with LUN ID $LunID ....." -ForegroundColor Green
+        New-HardDisk -VM $VMObject -DiskType RawPhysical -DeviceName $DeviceName `
+                     -Controller "SCSI controller 0" -ErrorVariable Err -ErrorAction SilentlyContinue | Out-Null
+        Write-Log "Creating RDM in $VM with LUN ID $LunID ....." -Path $LogFileName -Level Info
         $LunID++
     }
 
@@ -1456,9 +1808,9 @@ foreach($vdbenchVMs in $Global:config.VMs.GetEnumerator()){
 foreach($vdbenchVMs in $Global:config.VMs.GetEnumerator()){
     #Rebooting VMs...
     $VM = $vdbenchVMs.Value.Name
-    $VMObject = Get-VM $VM
-    Write-Host "Rebooting in $VM....." -ForegroundColor Green 
-    Restart-VM -VM $VMObject -Confirm:$false | Out-Null
+    $VMObject = Get-VM $VM -ErrorVariable +Err -ErrorAction SilentlyContinue 
+    Write-Log "Rebooting in $VM....." -Path $LogFileName -Level Info 
+    Restart-VM -VM $VMObject -Confirm:$false -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
 }
 
 Start-Sleep 60
@@ -1467,21 +1819,31 @@ foreach($vdbenchVMs in $Global:config.VMs.GetEnumerator()){
     #Checking Connectivity...
     $VM = $vdbenchVMs.Value.IP
     $VMName = $vdbenchVMs.Value.Name
-    Write-Host "Testing Connectivity in $VMName....." -ForegroundColor Green
+    Write-Log "Testing Connectivity in $VMName....." -Path $LogFileName -Level Info
     while(!(Test-Connection -ComputerName $VM -Count 1  -ErrorAction SilentlyContinue )){
-    Write-Host "Failed Connectivity test in $VMName, Trying again....." -ForegroundColor Green 
+    Write-Log "Failed Connectivity test in $VMName, Trying again....." -Path $LogFileName -Level Info 
     Start-Sleep 15
 
     }
 }
 
+#Adding Error to Log File $Err or $Error
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
+
 }
+#Logging hass been added to all commands
+Function Import-Specsvdbench2($SVM_Prefix) {
 
-Function Import-Specsvdbench2($SVM_Prexis) {
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
 
-$SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
 
-#Delete the Customazation in case the Script was run before. 
+$SVM_NAME = $Global:config.SVM.Name+"_"+$SVM_Prefix
+
+#Delete the profiles in case the Script was run before. 
 $CurrentOSSpecs = Get-OSCustomizationSpec -Name "$SVM_NAME*"
 
 if($CurrentOSSpecs.Count -gt 0){
@@ -1493,26 +1855,41 @@ Remove-OSCustomizationSpec -OSCustomizationSpec "$SVM_NAME*" -Confirm:$false | O
 ForEach($item in $Global:config.VMs.GetEnumerator() | Sort Key){
 
 $NewSpec = New-OSCustomizationSpec –Name $item.Value.Name –Domain vdbench –DnsServer "8.8.8.8" –NamingScheme VM –OSType Linux
-Get-OSCustomizationSpec $item.Value.Name | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping -IpMode UseStaticIp -IpAddress $item.Value.IP -SubnetMask $Global:config.VMs.VM00.Netmask -DefaultGateway $Global:config.VMs.VM00.Gateway | Out-Null
-
+Get-OSCustomizationSpec $item.Value.Name | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping -IpMode UseStaticIp `
+                                                                                                         -IpAddress $item.Value.IP `
+                                                                                                         -SubnetMask $Global:config.VMs.VM00.Netmask `
+                                                                                                         -DefaultGateway $Global:config.VMs.VM00.Gateway `
+                                                                                                         -ErrorVariable Err -ErrorAction SilentlyContinue | Out-Null
 }
 #Clear-Host
 
-write-host "Please find below the specs of all VMs " -ForegroundColor Green
-$OScustomizationSpec = Get-OSCustomizationSpec vdbench* | Get-OSCustomizationNicMapping | ft Spec, DefaultGateway, IPAddress
-$OScustomizationSpec
+Write-Log "Please find below the specs of all VMs " -Path $LogFileName -Level Info
+$OScustomizationSpec = Get-OSCustomizationSpec -Name "$SVM_NAME*" | Get-OSCustomizationNicMapping
+Write-Log -Message "Spec               DefaultGateway  IPAddress " -Path $LogFileName -Level Info 
+Write-Log -Message "----               --------------  --------- " -Path $LogFileName -Level Info
+$OScustomizationSpec | %{ Write-Log -Message $_.Spec.Name -Message2 $_.IPAddress -Message3 $_.DefaultGateway -Path $LogFileName -Level Info}
+
+#Adding Error to Log File $Err or $Error
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
+#Logging hass been added to all commands
+Function Create-VMsvdbench2($SVM_Prefix) {
 
-Function Create-VMsvdbench2($SVM_Prexis) {
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
+
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
         
-$SVM_NAME = $Global:config.SVM.Name
+$SVM_NAME = $Global:config.SVM.Name+"_"+$SVM_Prefix
 
-if(($SVM_Prexis -eq "iSCSI") -or ($SVM_Prexis -eq "NFS")){
+if(($SVM_Prefix -eq "iSCSI") -or ($SVM_Prefix -eq "NFS")){
 
 $DataStoreName = $Global:config.VMsLIF.lif0.Name
 
-}elseif($SVM_Prexis -eq "FCP"){
+}elseif($SVM_Prefix -eq "FCP"){
 
 $DataStoreName = $Global:config.VMsLIF.lif1.Name
 
@@ -1520,26 +1897,26 @@ $DataStoreName = $Global:config.VMsLIF.lif1.Name
 
 
 # Only Refresh the HBA when it is an iSCSI deployment....
-if($SVM_Prexis -eq "iSCSI" -or $SVM_Prexis -eq "FCP"){
+if($SVM_Prefix -eq "iSCSI" -or $SVM_Prefix -eq "FCP"){
         #Scanning HBAs
         foreach($H in $Global:config.Hosts.GetEnumerator()){
  
                 $HostName = $H.Value.Name
-                Write-Host "Refreshing HBAs on ESXi Server: $HostName" -ForegroundColor Green
-                Get-VMHostStorage -VMHost $HostName -Refresh -RescanAllHba | Out-Null
- 
+                Write-Log "Refreshing HBAs on ESXi Server: $HostName" -Path $LogFileName -Level Info
+                Get-VMHostStorage -VMHost $HostName -Refresh -RescanAllHba -ErrorVariable Err -ErrorAction SilentlyContinue | Out-Null
+               
         }
 }
 
 # Only Refresh the HBA when it is an FCP deployment....
-if($SVM_Prexis -eq "FCP"){
+if($SVM_Prefix -eq "FCP"){
         #Scanning HBAs
         foreach($H in $Global:config.Hosts.GetEnumerator()){
  
                 $HostName = $H.Value.Name
-                Write-Host "Refreshing HBAs on ESXi Server: $HostName" -ForegroundColor Green
-                Get-VMHostStorage -VMHost $HostName -Refresh -RescanAllHba | Out-Null
- 
+                Write-Log "Refreshing HBAs on ESXi Server: $HostName" -Path $LogFileName -Level Info
+                Get-VMHostStorage -VMHost $HostName -Refresh -RescanAllHba -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+                
         }
 }
 
@@ -1550,24 +1927,43 @@ if($SVM_Prexis -eq "FCP"){
      $numberVMperhost1 = $numberVMperhost
      ForEach($item in $Global:config.Hosts.GetEnumerator() | Sort Key){
             
-                        for($Location = $StartLocation ; $Location -lt $numberVMperhost1 ; $Location++){
+             for($Location = $StartLocation ; $Location -lt $numberVMperhost1 ; $Location++){
                         
-                        $VMHOSTName = $item.Value.Name
-                        $specName = $spec[$Location].Name
-                        $ESXiHost = Get-VMHost -Name $VMHOSTName
-                        $DataStoreOnline = Get-VMHost -Name $VMHOSTName | Get-Datastore -Name $DataStoreName -Refresh -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
-    
+                    $VMHOSTName = $item.Value.Name
+                    $specName = $spec[$Location].Name
+                    $ESXiHost = Get-VMHost -Name $VMHOSTName
+                    $DataStoreOnline = Get-VMHost -Name $VMHOSTName | Get-Datastore -Name $DataStoreName -Refresh `
+                                                                                    -WarningAction SilentlyContinue `
+                                                                                    -ErrorAction SilentlyContinue `
+                                                                                    -ErrorVariable +Err
+                        #Initialization of the Refresh counter
+                        $RefreshCount = 0
                         while(!($DataStoreOnline.State -eq "Available")){
-                        Write-Warning "Refreshing HBAs again on ESXi Server: $VMHOSTName as Datastore $DataStoreName cannot be found..." -ForegroundColor Green
-                        Get-VMHostStorage -VMHost $VMHOSTName -Refresh -RescanAllHba | Out-Null
-                        $DataStoreOnline = Get-VMHost -Name $VMHOSTName | Get-Datastore -Name $DataStoreName -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
-                        
-                        }
-                               
+                                Write-Log "Refreshing HBAs again on ESXi Server: $VMHOSTName as Datastore $DataStoreName cannot be found..." -Path $LogFileName -Level Warn
+                                Get-VMHostStorage -VMHost $VMHOSTName -Refresh -RescanAllHba | Out-Null
+                                $DataStoreOnline = Get-VMHost -Name $VMHOSTName | Get-Datastore -Name $DataStoreName `
+                                                                                                -WarningAction SilentlyContinue `
+                                                                                                -ErrorAction SilentlyContinue `
+                                                                                                -ErrorVariable +Err
+                                   if($RefreshCount -eq 20){
+                                       Write-Log "Make sure that $DataStoreName is available for $VMHOSTName ESXi Server:"  -Path $LogFileName -Level Warn
+                                       $ExitEntry = Read-Host "If you want to keep refreshing the HBAs type any key, Otherwise type 'exit' to stop the script (To Continue Type any key)"
+                                        if($ExitEntry -eq "exit"){
+                                            return "DatastoreCannotbeFound"
+                                            Write-Log "$VMHOSTName ESXi server couldnt find Datastore $DataStoreName..." -Path $LogFileName -Level Error
+                                            break
+                                        }
 
-                        Write-Host "Cloning VM $specName on ESXI server $VMHOSTName ......." -ForegroundColor Green
-  
-                        New-VM -VMhost $VMHOSTName -Name $specName -Template vdbench-template -OSCustomizationSpec $specName -Datastore $DataStoreName -DrsAutomationLevel Manual -WarningAction silentlyContinue | Out-Null
+                                       $RefreshCount = 0
+                                   } 
+                                   $RefreshCount++
+                                }
+                               
+                               Write-Log "Cloning VM $specName on ESXI server $VMHOSTName ......." -Path $LogFileName -Level Info
+                               New-VM -VMhost $VMHOSTName -Name $specName -Template vdbench-template `
+                                      -OSCustomizationSpec $specName -Datastore $DataStoreName `
+                                      -DrsAutomationLevel Manual -WarningAction silentlyContinue `
+                                      -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
                                                 
                         #if this is a vswitch or dswitch.
                         if($Global:config.other.DSwitch){
@@ -1578,25 +1974,38 @@ if($SVM_Prexis -eq "FCP"){
                         #It has been changed to -Portgroup as per VMware-PowerCLI warnings.
                         $PortGroupname = $Global:config.Other.PortGroupName
                         }
-                        $VMNetwork = Get-VirtualPortGroup -Name $PortGroupname -VMHost $ESXiHost -ErrorAction SilentlyContinue
-                        Get-VM $specName | Get-NetworkAdapter | Set-NetworkAdapter -Portgroup $VMNetwork -Confirm:$false | Out-Null
+                        $VMNetwork = Get-VirtualPortGroup -Name $PortGroupname -VMHost $ESXiHost `
+                                                          -ErrorVariable +Err -ErrorAction SilentlyContinue 
+                        Get-VM $specName | Get-NetworkAdapter | Set-NetworkAdapter -Portgroup $VMNetwork -Confirm:$false `
+                                                                                   -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
                                       
                         }
              $StartLocation = $Location
              $numberVMperhost1 = $numberVMperhost1 + $numberVMperhost
             }
-            Write-Host "Starting all VMs......." -ForegroundColor Green          
-            Start-VM -VM "$SVM_NAME*" -Confirm:$false | Out-Null
-            
- }
+            Write-Log "Starting all VMs......." -Path $LogFileName -Level Info          
+            Start-VM -VM "$SVM_NAME*" -Confirm:$false `
+                     -ErrorVariable Err -ErrorAction SilentlyContinue | Out-Null
 
+#Adding Error to Log File $Err or $Error
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
+
+}
+#Logging hass been added to all commands
 Function Mounting-NFSVolumes2($VMName){
  
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
+
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
+
  #Creating the Folders at /mnt/vdbenchTest*
 
- $SVM_NAME = $Global:config.SVM.Name+"NFS"
+ $SVM_NAME = $Global:config.SVM.Name+"_NFS"
 
- $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
+ $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false } 
  $NFSVolumes1 = Get-NcVol -Vserver $SVM_NAME -Name "$VMName*" -Aggregate $DataAggr[0]
  $NFSVolumes2 = Get-NcVol -Vserver $SVM_NAME -Name "$VMName*" -Aggregate $DataAggr[1]
  
@@ -1628,12 +2037,12 @@ Function Mounting-NFSVolumes2($VMName){
 
  $Location = 0
  foreach($NFSVol in $NFSVolumes2){
- $Location++
+      $Location++
         if($Location -eq 1){
-        $DATALIF = $NFSLIF3
+            $DATALIF = $NFSLIF3
         }elseif($Location -eq 2){
-        $DATALIF = $NFSLIF4
-        $Location = 0
+            $DATALIF = $NFSLIF4
+            $Location = 0
         }
         $PermanentMount = "echo '$DATALIF`:/$NFSvol /mnt/$NFSvol nfs defaults        0 0' >> /etc/fstab"
         $Mount = "mount -t nfs $DATALIF`:/$NFSvol /mnt/$NFSvol"
@@ -1644,39 +2053,51 @@ Function Mounting-NFSVolumes2($VMName){
         Invoke-SSHCommand -Index 0 -Command $PermanentMount | Out-Null
         #3. Mounting the NFS vol
         Invoke-SSHCommand -Index 0 -Command $Mount | Out-Null
-
- 
- 
  }
-                   
+ 
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }  
+         
  }
-
+#Logging hass been added to all commands
 Function Adding-DNS2{
- 
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
+
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
 
             ForEach($item in $Global:config.VMs.GetEnumerator() | Sort Key){
-            $IP = $item.Value.IP
-            $VMName = $item.Value.Name
-            $DNSLINE = "echo '$IP $VMName' >> /etc/hosts"
-            $StartNTPServices = "systemctl start ntpd"
-            $EnableNTPServices = "systemctl enable ntpd"
-            Invoke-SSHCommand -Index 0 -Command $DNSLINE | Out-Null
-            Invoke-SSHCommand -Index 0 -Command $StartNTPServices | Out-Null
-            Invoke-SSHCommand -Index 0 -Command $EnableNTPServices | Out-Null
-            
+                $IP = $item.Value.IP
+                $VMName = $item.Value.Name
+                $DNSLINE = "echo '$IP $VMName' >> /etc/hosts"
+                $StartNTPServices = "systemctl start ntpd"
+                $EnableNTPServices = "systemctl enable ntpd"
+                Invoke-SSHCommand -Index 0 -Command $DNSLINE | Out-Null
+                Invoke-SSHCommand -Index 0 -Command $StartNTPServices | Out-Null
+                Invoke-SSHCommand -Index 0 -Command $EnableNTPServices | Out-Null
             }
 
-
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
  }
+#Logging hass been added to all commands
+Function Config-DNSVM2($SVM_Prefix){
 
-Function Config-DNSVM2($SVM_Prexis){
- 
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
+
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
+
 $secpasswd = ConvertTo-SecureString "Netapp1!" -AsPlainText -Force
 $mycreds = New-Object System.Management.Automation.PSCredential ("root", $secpasswd)
 
-if(($SVM_Prexis -eq "iSCSI") -or ($SVM_Prexis -eq "FCP")){
+if(($SVM_Prefix -eq "iSCSI") -or ($SVM_Prefix -eq "FCP")){
 Start-Sleep 60
-}elseif($SVM_Prexis -eq "NFS"){
+}elseif($SVM_Prefix -eq "NFS"){
 Start-Sleep 45
 }
 
@@ -1687,19 +2108,28 @@ Start-Sleep 45
                           $SSHSesionVM = New-SSHSession -ComputerName $item.Value.IP -Credential $mycreds -AcceptKey -ConnectionTimeout 120 -OperationTimeout 120
                           $IPVMvalue = $item.Value.IP
                           if($SSHSesionVM){
-                                Write-Host "Adding DNS config in $IPVMvalue......" -ForegroundColor Green
+                                Write-Log "Adding DNS config in $IPVMvalue......" -Path $LogFileName -Level Info
                                 Adding-DNS2
                                 Remove-SSHSession -SessionId 0 | Out-Null
                           }else{
                           
-                          Write-Host "SSH Connection could not be established with " $item.Value.IP
+                          Write-Log "SSH Connection could not be established with $IPVMvalue" -Path $LogFileName -Level Error
                                                    
                           }                                                                    
                    }
                 }
- }
-
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
+}
+#Logging hass been added to all commands
 Function Config-VMNFSFiles2{
+
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
+
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
 
 $secpasswd = ConvertTo-SecureString "Netapp1!" -AsPlainText -Force
 $mycreds = New-Object System.Management.Automation.PSCredential ("root", $secpasswd)
@@ -1714,22 +2144,31 @@ $mycreds = New-Object System.Management.Automation.PSCredential ("root", $secpas
                           $SSHSesionVM = New-SSHSession -ComputerName $item.Value.IP -Credential $mycreds -AcceptKey -ConnectionTimeout 120 -OperationTimeout 120
                           $IPVMvalue = $item.Value.IP
                                         if($SSHSesionVM){
-                                        Write-Host "Mounting NFS Volumes in $IPVMvalue......" -ForegroundColor Green
+                                        Write-Log "Mounting NFS Volumes in $IPVMvalue......" -Path $LogFileName -Level Info
                                         Mounting-NFSVolumes2($item.Value.Name)
                                         Remove-SSHSession -SessionId 0 | Out-Null
                           
                           }else{
                           
-                          Write-Host "SSH Connection could not be established with " $item.Value.IP
+                          Write-Log "SSH Connection could not be established with $IPVMvalue" -Path $LogFileName -Level Error
                  
                           }                                                                    
                    }
                 }
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 }
+#Logging hass been added to all commands
+Function Shared-Files($SVM_Prefix, $CurrentPath){
 
-Function Shared-Files($SVM_Prexis, $CurrentPath){
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
 
-$SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
+
+$SVM_NAME = $Global:config.SVM.Name+"_"+$SVM_Prefix
 
         $secpasswd = ConvertTo-SecureString "Netapp1!" -AsPlainText -Force
         $mycreds = New-Object System.Management.Automation.PSCredential ("root", $secpasswd)
@@ -1738,7 +2177,7 @@ $SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
         $JunctionPath = "/"+$NFSvol
         
         #Export Policy is needed for the ShareFolder (iSCSI), NFS workflow does it automatic. 
-        if(($SVM_Prexis -eq "iSCSI") -or ($SVM_Prexis -eq "FCP")){
+        if(($SVM_Prefix -eq "iSCSI") -or ($SVM_Prefix -eq "FCP")){
         
          New-NcExportPolicy -Name "$SVM_NAME" -VserverContext "$SVM_NAME" | Out-Null
          #This is to change the policy on the root volume so that we can map the SharedFiles volume on the VMs
@@ -1766,20 +2205,20 @@ $SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
 
         if (!(Test-Path $Localfile)) {
 
-        Write-Warning "$Localfile absent in the Path.... "
-        Write-Warning "Please select the path for vdbench binaries.... "
-        $Localfile = Get-FileName $CurrentPath "zip"
+        Write-Log "$Localfile absent in the Path.... " -Path $LogFileName -Level Warn
+        Write-Log "Please select the path for vdbench binaries.... " -Path $LogFileName -Level Warn
+        $Localfile_Array = Get-FileName $CurrentPath "zip"
+        # $Localfile_Array is an array
+        $Localfile = $Localfile_Array[0]
                 
         }
-
-
 
         ForEach($item in $Global:config.VMs.GetEnumerator() | Sort Key){
                         #Export Policies and Rules 
                         New-NcExportPolicy -Name $item.Value.Name -VserverContext "$SVM_NAME" | Out-Null
                         New-NcExportRule -Policy $item.Value.Name -ClientMatch $item.Value.IP -ReadOnlySecurityFlavor any -ReadWriteSecurityFlavor any -VserverContext "$SVM_NAME" | Out-Null
                         $IPVMvalue = $item.Value.IP
-                        Write-Host "Changing vdbench files in $IPVMvalue......" -ForegroundColor Green                       
+                        Write-Log "Changing vdbench files in $IPVMvalue......" -Path $LogFileName -Level Info                       
                         New-SSHSession -ComputerName $IPVMvalue -Credential $mycreds -AcceptKey -ConnectionTimeout 120 -OperationTimeout 120 | Out-Null
                         $PermanentMount = "echo '$DATALIF`:/$NFSvol /root/$NFSvol nfs defaults        0 0' >> /etc/fstab"
                         $Mount = "mount -t nfs $DATALIF`:/$NFSvol /root/$NFSvol"
@@ -1788,7 +2227,7 @@ $SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
                         #New SFTP Session
                         New-SFTPSession -ComputerName $IPVMvalue -Credential $mycreds -AcceptKey -ConnectionTimeout 120 -OperationTimeout 120 | Out-Null
                         #Upload the files to Centos VM....
-                        Write-Host "Importing and Extracting vdbench binaries to $IPVMvalue......" -ForegroundColor Green                       
+                        Write-Log "Importing and Extracting vdbench binaries to $IPVMvalue......" -Path $LogFileName -Level Info                       
                         Set-SFTPFile -SessionId 0 -LocalFile $Localfile -RemotePath /root/ | Out-Null
                         # Disconnect SFTP session
                         Remove-SFTPSession -SessionId 0 | Out-Null
@@ -1828,11 +2267,20 @@ $SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
         Invoke-SSHCommand -Index 0 -Command $sharedFolder | Out-Null
         Remove-SSHSession -SessionId 0 | Out-Null      
 
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
+#Logging hass been added to all commands
+Function vdbench-Files2($SVM_Prefix){
+ 
+        # $Global:PathNameFiles is an array
+        # $Global:PathNameFiles[0] is the Configuratiton path.
+        # $Global:PathNameFiles[1] is the log name.
 
-Function vdbench-Files2($SVM_Prexis){
-        
+        $ConfigFilePath = $Global:PathNameFiles[0]
+        $LogFileName = $Global:PathNameFiles[1]
+       
         #Converting string to Int32
         $strNumberofVolumesPerVM = $Global:config.Other.NumberofVolumesPerVM
         $BooleanValue = $strNumberofVolumesPerVM -match "^[0-9]{1,4}"
@@ -1846,90 +2294,90 @@ Function vdbench-Files2($SVM_Prexis){
         #Open a session in one of the VM where Sharefolder has ben mounted
         New-SSHSession -ComputerName $Global:config.VMs.VM00.IP -Credential $mycreds -AcceptKey -ConnectionTimeout 240 -OperationTimeout 240 | Out-Null
         
-        if($SVM_Prexis -eq "NFS"){
+        if($SVM_Prefix -eq "NFS"){
         
-        # Modify Hostfile at /root/SharedFiles/vdbench/nfs/aff-hosts-nfs.
-        # hd=slave01,system=centos701,user=root
-        # Delete the last 6 lines of the File
-        $DeleteLine0 = "sed -i '37,42d' /root/SharedFiles/vdbench/nfs/aff-hosts-nfs"    
-        Invoke-SSHCommand -Index 0 -Command $DeleteLine0 | Out-Null
+            # Modify Hostfile at /root/SharedFiles/vdbench/nfs/aff-hosts-nfs.
+            # hd=slave01,system=centos701,user=root
+            # Delete the last 6 lines of the File
+            $DeleteLine0 = "sed -i '37,42d' /root/SharedFiles/vdbench/nfs/aff-hosts-nfs"    
+            Invoke-SSHCommand -Index 0 -Command $DeleteLine0 | Out-Null
         
-        # Delete all lines at /root/SharedFiles/vdbench/nfs/aff-luns-nfs.
-        $DeleteLine1 = "sed -i '15,45d' /root/SharedFiles/vdbench/nfs/aff-luns-nfs"    
-        Invoke-SSHCommand -Index 0 -Command $DeleteLine1 | Out-Null
+            # Delete all lines at /root/SharedFiles/vdbench/nfs/aff-luns-nfs.
+            $DeleteLine1 = "sed -i '15,45d' /root/SharedFiles/vdbench/nfs/aff-luns-nfs"    
+            Invoke-SSHCommand -Index 0 -Command $DeleteLine1 | Out-Null
 
-        #Add the size of the file Line.
-        $SizeFile = $Global:config.Other.FileSize
-        $sizeFileLine = "echo 'sd=default,size=$SizeFile,count=(1,5)' >> /root/SharedFiles/vdbench/nfs/aff-luns-nfs"
+            #Add the size of the file Line.
+            $SizeFile = $Global:config.Other.FileSize
+            $sizeFileLine = "echo 'sd=default,size=$SizeFile,count=(1,5)' >> /root/SharedFiles/vdbench/nfs/aff-luns-nfs"
                         
-        Invoke-SSHCommand -Index 0 -Command $sizeFileLine | Out-Null
-        Remove-SSHSession -SessionId 0 | Out-Null
-        $SlaveNumber = 0
+            Invoke-SSHCommand -Index 0 -Command $sizeFileLine | Out-Null
+            Remove-SSHSession -SessionId 0 | Out-Null
+            $SlaveNumber = 0
         
-        }elseif($SVM_Prexis -eq "iSCSI"){
+        }elseif($SVM_Prefix -eq "iSCSI"){
         
-        # Modify Hostfile at /root/SharedFiles/vdbench/vmdk/aff-hosts-vmdk.
-        # hd=slave01,system=centos701,user=root
-        # Delete the last 6 lines of the File
-        $DeleteLine0 = "sed -i '37,60d' /root/SharedFiles/vdbench/vmdk/aff-hosts-vmdk"    
-        Invoke-SSHCommand -Index 0 -Command $DeleteLine0 | Out-Null
+            # Modify Hostfile at /root/SharedFiles/vdbench/vmdk/aff-hosts-vmdk.
+            # hd=slave01,system=centos701,user=root
+            # Delete the last 6 lines of the File
+            $DeleteLine0 = "sed -i '37,60d' /root/SharedFiles/vdbench/vmdk/aff-hosts-vmdk"    
+            Invoke-SSHCommand -Index 0 -Command $DeleteLine0 | Out-Null
         
-        # Delete all lines at /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk.
-        $DeleteLine1 = "sed -i '12,45d' /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"    
-        Invoke-SSHCommand -Index 0 -Command $DeleteLine1 | Out-Null
+            # Delete all lines at /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk.
+            $DeleteLine1 = "sed -i '12,45d' /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"    
+            Invoke-SSHCommand -Index 0 -Command $DeleteLine1 | Out-Null
 
-        #size of the file Line is not needed for iSCSI/vmdks
-        #$SizeFile = $Global:config.Other.FileSize
-        #$sizeFileLine = "echo 'sd=default,size=$SizeFile,count=(1,5)' >> /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"
-        #Invoke-SSHCommand -Index 0 -Command $sizeFileLine | Out-Null
+            #size of the file Line is not needed for iSCSI/vmdks
+            #$SizeFile = $Global:config.Other.FileSize
+            #$sizeFileLine = "echo 'sd=default,size=$SizeFile,count=(1,5)' >> /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"
+            #Invoke-SSHCommand -Index 0 -Command $sizeFileLine | Out-Null
         
-        Remove-SSHSession -SessionId 0 | Out-Null
-        $SlaveNumber = 0
-        }elseif($SVM_Prexis -eq "FCP"){
-        # Modify Hostfile at /root/SharedFiles/vdbench/fcp/aff-hosts-fcp.
-        # hd=slave01,system=centos701,user=root
-        # Delete the last 6 lines of the File
-        $DeleteLine0 = "sed -i '32,37d' /root/SharedFiles/vdbench/fcp/aff-hosts-fcp"    
-        Invoke-SSHCommand -Index 0 -Command $DeleteLine0 | Out-Null
+            Remove-SSHSession -SessionId 0 | Out-Null
+            $SlaveNumber = 0
+            }elseif($SVM_Prefix -eq "FCP"){
+            # Modify Hostfile at /root/SharedFiles/vdbench/fcp/aff-hosts-fcp.
+            # hd=slave01,system=centos701,user=root
+            # Delete the last 6 lines of the File
+            $DeleteLine0 = "sed -i '32,37d' /root/SharedFiles/vdbench/fcp/aff-hosts-fcp"    
+            Invoke-SSHCommand -Index 0 -Command $DeleteLine0 | Out-Null
         
-        # Delete all lines at /root/SharedFiles/vdbench/fcp/aff-luns-fcp.
-        $DeleteLine1 = "sed -i '14,42d' /root/SharedFiles/vdbench/fcp/aff-luns-fcp"    
-        Invoke-SSHCommand -Index 0 -Command $DeleteLine1 | Out-Null
+            # Delete all lines at /root/SharedFiles/vdbench/fcp/aff-luns-fcp.
+            $DeleteLine1 = "sed -i '14,42d' /root/SharedFiles/vdbench/fcp/aff-luns-fcp"    
+            Invoke-SSHCommand -Index 0 -Command $DeleteLine1 | Out-Null
 
-        #size of the file Line is not needed for FCP
-        #$SizeFile = $Global:config.Other.FileSize
-        #$sizeFileLine = "echo 'sd=default,size=$SizeFile,count=(1,5)' >> /root/SharedFiles/vdbench/fcp/aff-luns-fcp"
-        #Invoke-SSHCommand -Index 0 -Command $sizeFileLine | Out-Null
+            #size of the file Line is not needed for FCP
+            #$SizeFile = $Global:config.Other.FileSize
+            #$sizeFileLine = "echo 'sd=default,size=$SizeFile,count=(1,5)' >> /root/SharedFiles/vdbench/fcp/aff-luns-fcp"
+            #Invoke-SSHCommand -Index 0 -Command $sizeFileLine | Out-Null
         
-        Remove-SSHSession -SessionId 0 | Out-Null
-        $SlaveNumber = 0
+            Remove-SSHSession -SessionId 0 | Out-Null
+            $SlaveNumber = 0
         }
   
         ForEach($item1 in $Global:config.VMs.GetEnumerator() | Sort Key){    
                 
                 New-SSHSession -ComputerName $item1.Value.IP -Credential $mycreds -AcceptKey -ConnectionTimeout 120 -OperationTimeout 120 | Out-Null
                 
-                if($SVM_Prexis -eq "NFS"){
+                if($SVM_Prefix -eq "NFS"){
                 
-                #FOR is each SlaveXX
-                #Adding the new Lines at /root/SharedFiles/vdbench/nfs/aff-hosts-nfs
-                $VMName = $item1.Value.Name
-                $SlaveLine = "hd=slave0$SlaveNumber,system=$VMName,user=root"
-                $SlaveLine = "echo '$SlaveLine' >> /root/SharedFiles/vdbench/nfs/aff-hosts-nfs"
-                Invoke-SSHCommand -Index 0 -Command $SlaveLine | Out-Null
+                    #FOR is each SlaveXX
+                    #Adding the new Lines at /root/SharedFiles/vdbench/nfs/aff-hosts-nfs
+                    $VMName = $item1.Value.Name
+                    $SlaveLine = "hd=slave0$SlaveNumber,system=$VMName,user=root"
+                    $SlaveLine = "echo '$SlaveLine' >> /root/SharedFiles/vdbench/nfs/aff-hosts-nfs"
+                    Invoke-SSHCommand -Index 0 -Command $SlaveLine | Out-Null
 
-                #Adding the new Lines at /root/SharedFiles/vdbench/nfs/aff-luns-nfs
-                #sd=sd1-1,host=slave01,lun=/mnt/vdbenchTest00_NFS_VD_vol1/file1-*,openflags=o_direct
-                #/vdbench_NFS00_NFS_VD_vol_1
-                #sd=sd1-1,host=slave01,lun=/mnt/vdbench_NFS00_NFS_VD_vol1/file1-*,openflags=o_direct
-                #sd=sd1-2,host=slave01,lun=/mnt/vdbench_NFS00_NFS_VD_vol2/file1-*,openflags=o_direct
-                #sd=sd1-3,host=slave01,lun=/mnt/vdbench_NFS00_NFS_VD_vol3/file1-*,openflags=o_direct
-                #sd=sd1-4,host=slave01,lun=/mnt/vdbench_NFS00_NFS_VD_vol4/file1-*,openflags=o_direct
+                    #Adding the new Lines at /root/SharedFiles/vdbench/nfs/aff-luns-nfs
+                    #sd=sd1-1,host=slave01,lun=/mnt/vdbenchTest00_NFS_VD_vol1/file1-*,openflags=o_direct
+                    #/vdbench_NFS00_NFS_VD_vol_1
+                    #sd=sd1-1,host=slave01,lun=/mnt/vdbench_NFS00_NFS_VD_vol1/file1-*,openflags=o_direct
+                    #sd=sd1-2,host=slave01,lun=/mnt/vdbench_NFS00_NFS_VD_vol2/file1-*,openflags=o_direct
+                    #sd=sd1-3,host=slave01,lun=/mnt/vdbench_NFS00_NFS_VD_vol3/file1-*,openflags=o_direct
+                    #sd=sd1-4,host=slave01,lun=/mnt/vdbench_NFS00_NFS_VD_vol4/file1-*,openflags=o_direct
            
                 for($i=1; $i -lt ($NumberofVolumesPerVM+1); $i++){
-                $VolumeLine = "sd=sd$SlaveNumber-$i,host=slave0$SlaveNumber,lun=/mnt/$VMName`_NFS_VD_vol_$i/file1-*,openflags=o_direct"
-                $VolumeLine = "echo '$VolumeLine' >> /root/SharedFiles/vdbench/nfs/aff-luns-nfs"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine | Out-Null
+                    $VolumeLine = "sd=sd$SlaveNumber-$i,host=slave0$SlaveNumber,lun=/mnt/$VMName`_NFS_VD_vol_$i/file1-*,openflags=o_direct"
+                    $VolumeLine = "echo '$VolumeLine' >> /root/SharedFiles/vdbench/nfs/aff-luns-nfs"
+                    Invoke-SSHCommand -Index 0 -Command $VolumeLine | Out-Null
                 }
                 
                 $VolumeLine1 = "      "
@@ -1938,69 +2386,64 @@ Function vdbench-Files2($SVM_Prexis){
                 $SlaveNumber++
                 Remove-SSHSession -SessionId 0 | Out-Null
                 
-                }elseif($SVM_Prexis -eq "iSCSI"){
+                }elseif($SVM_Prefix -eq "iSCSI"){
                 
-                #FOR is each SlaveXX
-                #Adding the new Lines at /root/SharedFiles/vdbench/vmdk/aff-hosts-vmdk
-                $VMName = $item1.Value.Name
-                $SlaveLine = "hd=slave0$SlaveNumber,system=$VMName,user=root"
-                $SlaveLine = "echo '$SlaveLine' >> /root/SharedFiles/vdbench/vmdk/aff-hosts-vmdk"
-                Invoke-SSHCommand -Index 0 -Command $SlaveLine | Out-Null
+                    #FOR is each SlaveXX
+                    #Adding the new Lines at /root/SharedFiles/vdbench/vmdk/aff-hosts-vmdk
+                    $VMName = $item1.Value.Name
+                    $SlaveLine = "hd=slave0$SlaveNumber,system=$VMName,user=root"
+                    $SlaveLine = "echo '$SlaveLine' >> /root/SharedFiles/vdbench/vmdk/aff-hosts-vmdk"
+                    Invoke-SSHCommand -Index 0 -Command $SlaveLine | Out-Null
 
-                #Adding the new Lines at /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk
-                #sd=sd1-1,host=slave01,lun=/dev/sdb,openflags=o_direct,offset=0
-                #sd=sd1-2,host=slave01,lun=/dev/sdc,openflags=o_direct,offset=0
-                #sd=sd1-3,host=slave01,lun=/dev/sdd,openflags=o_direct,offset=0
-                #sd=sd1-4,host=slave01,lun=/dev/sde,openflags=o_direct,offset=0
+                    #Adding the new Lines at /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk
+                    #sd=sd1-1,host=slave01,lun=/dev/sdb,openflags=o_direct,offset=0
+                    #sd=sd1-2,host=slave01,lun=/dev/sdc,openflags=o_direct,offset=0
+                    #sd=sd1-3,host=slave01,lun=/dev/sdd,openflags=o_direct,offset=0
+                    #sd=sd1-4,host=slave01,lun=/dev/sde,openflags=o_direct,offset=0
                                 
-                $letters = [char[]]('b'[0]..'z'[0])
+                    $letters = [char[]]('b'[0]..'z'[0])
+
                 for($i=1; $i -lt ($NumberofVolumesPerVM+1); $i++){
-                $letters1 = $letters[($i-1)]
-                $VolumeLine = "sd=sd$SlaveNumber-$i,host=slave0$SlaveNumber,lun=/dev/sd$letters1,openflags=o_direct,offset=0"
-                $VolumeLine = "echo '$VolumeLine' >> /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine | Out-Null
+                    $letters1 = $letters[($i-1)]
+                    $VolumeLine = "sd=sd$SlaveNumber-$i,host=slave0$SlaveNumber,lun=/dev/sd$letters1,openflags=o_direct,offset=0"
+                    $VolumeLine = "echo '$VolumeLine' >> /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"
+                    Invoke-SSHCommand -Index 0 -Command $VolumeLine | Out-Null
 
                 }
                 
-                $VolumeLine1 = "      "
-                $VolumeLine1 = "echo '$VolumeLine1' >> /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine1 | Out-Null
-                            
-                $SlaveNumber++
-                Remove-SSHSession -SessionId 0 | Out-Null
+                    $VolumeLine1 = "      "
+                    $VolumeLine1 = "echo '$VolumeLine1' >> /root/SharedFiles/vdbench/vmdk/aff-luns-vmdk"
+                    Invoke-SSHCommand -Index 0 -Command $VolumeLine1 | Out-Null            
+                    $SlaveNumber++
+                    Remove-SSHSession -SessionId 0 | Out-Null
+             
+                }elseif($SVM_Prefix -eq "FCP"){
                 
-                
-                }elseif($SVM_Prexis -eq "FCP"){
-                
-                #FOR is each SlaveXX
-                #Adding the new Lines at /root/SharedFiles/vdbench/fcp/aff-hosts-fcp
-                $VMName = $item1.Value.Name
-                $SlaveLine = "hd=slave0$SlaveNumber,system=$VMName,user=root"
-                $SlaveLine = "echo '$SlaveLine' >> /root/SharedFiles/vdbench/fcp/aff-hosts-fcp"
-                Invoke-SSHCommand -Index 0 -Command $SlaveLine | Out-Null
+                    #FOR is each SlaveXX
+                    #Adding the new Lines at /root/SharedFiles/vdbench/fcp/aff-hosts-fcp
+                    $VMName = $item1.Value.Name
+                    $SlaveLine = "hd=slave0$SlaveNumber,system=$VMName,user=root"
+                    $SlaveLine = "echo '$SlaveLine' >> /root/SharedFiles/vdbench/fcp/aff-hosts-fcp"
+                    Invoke-SSHCommand -Index 0 -Command $SlaveLine | Out-Null
 
-                #Adding the new Lines at /root/SharedFiles/vdbench/fcp/aff-luns-fcp
-                #sd=sd1-1,host=slave01,lun=/dev/sdb,openflags=o_direct,offset=0
-                #sd=sd1-2,host=slave01,lun=/dev/sdc,openflags=o_direct,offset=0
-                #sd=sd1-1,host=slave01,lun=/dev/sdd,openflags=o_direct,offset=0
-                #sd=sd1-2,host=slave01,lun=/dev/sde,openflags=o_direct,offset=0
-                
-                $letters = [char[]]('b'[0]..'z'[0]) 
+                    #Adding the new Lines at /root/SharedFiles/vdbench/fcp/aff-luns-fcp
+                    #sd=sd1-1,host=slave01,lun=/dev/sdb,openflags=o_direct,offset=0
+                    #sd=sd1-2,host=slave01,lun=/dev/sdc,openflags=o_direct,offset=0
+                    #sd=sd1-1,host=slave01,lun=/dev/sdd,openflags=o_direct,offset=0
+                    #sd=sd1-2,host=slave01,lun=/dev/sde,openflags=o_direct,offset=0
+                    $letters = [char[]]('b'[0]..'z'[0]) 
                 for($i=1; $i -lt ($NumberofVolumesPerVM+1); $i++){
-                $letters1 = $letters[($i-1)]
-                $VolumeLine = "sd=sd$SlaveNumber-$i,host=slave0$SlaveNumber,lun=/dev/sd$letters1,openflags=o_direct,offset=0"
-                $VolumeLine = "echo '$VolumeLine' >> /root/SharedFiles/vdbench/fcp/aff-luns-fcp"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine | Out-Null
-
+                    $letters1 = $letters[($i-1)]
+                    $VolumeLine = "sd=sd$SlaveNumber-$i,host=slave0$SlaveNumber,lun=/dev/sd$letters1,openflags=o_direct,offset=0"
+                    $VolumeLine = "echo '$VolumeLine' >> /root/SharedFiles/vdbench/fcp/aff-luns-fcp"
+                    Invoke-SSHCommand -Index 0 -Command $VolumeLine | Out-Null
                 }
                 
-                $VolumeLine1 = "      "
-                $VolumeLine1 = "echo '$VolumeLine1' >> /root/SharedFiles/vdbench/fcp/aff-luns-fcp"
-                Invoke-SSHCommand -Index 0 -Command $VolumeLine1 | Out-Null
-                                                         
-                $SlaveNumber++
-                
-                Remove-SSHSession -SessionId 0 | Out-Null
+                    $VolumeLine1 = "      "
+                    $VolumeLine1 = "echo '$VolumeLine1' >> /root/SharedFiles/vdbench/fcp/aff-luns-fcp"
+                    Invoke-SSHCommand -Index 0 -Command $VolumeLine1 | Out-Null                                    
+                    $SlaveNumber++
+                    Remove-SSHSession -SessionId 0 | Out-Null
  
                 }
 
@@ -2020,17 +2463,22 @@ Function vdbench-Files2($SVM_Prexis){
              }
         }
 
-Write-Host "Deployment has Finished......" -ForegroundColor Green
-}
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
-Function Remove-VMsDatatore($SVM_Prexis){
+Write-Log "Deployment has Finished......" -Path $LogFileName -Level Info
+}
+#Logging hass been added to all commands
+Function Remove-VMsDatatore($SVM_Prefix){
+
+$LogFileName = $Global:PathNameFiles[1]
 
 #Connecting to VCenter....
-if(($SVM_Prexis -eq "iSCSI") -or ($SVM_Prexis -eq "NFS")){
+if(($SVM_Prefix -eq "iSCSI") -or ($SVM_Prefix -eq "NFS")){
 
 $DataStoreName = $Global:config.VMsLIF.lif0.Name
 
-}elseif($SVM_Prexis -eq "FCP"){
+}elseif($SVM_Prefix -eq "FCP"){
 
 $DataStoreName = $Global:config.VMsLIF.lif1.Name
 
@@ -2038,19 +2486,17 @@ $DataStoreName = $Global:config.VMsLIF.lif1.Name
 $ESXiHost = $Global:config.Hosts.Host00.Name
 $SVM_NAME = $Global:config.SVM.Name
 
-$ConnetionVCenter = ConnectVCenter $ConnectedVcenter
+$ConnetionVCenter = Connect-Vcenter $ConnectedVcenter -LogFilePath $LogFileName
 
 if($ConnetionVCenter -eq "Stop"){
 
-    Write-Host "We failed to connected to Vcenter $ConnectedVcenter" -ForegroundColor Red
+    Write-Log "We failed to connected to Vcenter $ConnectedVcenter" -Path $LogFileName -Level Error
     Return "CancelDeletionVMs"
     Break
 }
 
 
-
-
-$HostDataStores = Get-Datastore -Name $DataStoreName | Get-VMHost
+$HostDataStores = Get-Datastore -Name $DataStoreName -ErrorAction SilentlyContinue | Get-VMHost -ErrorVariable Err -ErrorAction SilentlyContinue
 
 #Delete the Customazation in case the Script was run before. 
 $CurrentOSSpecs = Get-OSCustomizationSpec -Name "$SVM_NAME*"
@@ -2063,11 +2509,9 @@ Remove-OSCustomizationSpec -OSCustomizationSpec "$SVM_NAME*" -Confirm:$false | O
        
    if($HostDataStores){
 
-        Write-host "Are you sure you want to Delete vdbench VMs and NFS Datastore:  "
+        Write-Log "Are you sure you want to Delete vdbench VMs and NFS Datastore:  "  -Path $LogFileName -Level Warn
         $Creation = Read-Host "(No/yes)"
-        Write-Host "" 
-        
-        
+        Write-Log " " -Path $LogFileName -Level Info      
         if($Creation -eq "yes"){
                 #Removing all VMs                
                  ForEach($VM in $Global:config.VMs.GetEnumerator() | Sort Key){
@@ -2091,31 +2535,31 @@ Remove-OSCustomizationSpec -OSCustomizationSpec "$SVM_NAME*" -Confirm:$false | O
                               
                 $PortGroup = Get-VMHost -Name $ESXiHost | Get-VirtualPortGroup -Name "VM Network" -VirtualSwitch $VSwitch -Standard
                 Remove-VirtualPortGroup -VirtualPortGroup $PortGroup -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-                Write-Host "Deleting a Port Group vdbench that used to import OVA......" -ForegroundColor Green
+                Write-Log "Deleting a Port Group vdbench that used to import OVA......" -Path $LogFileName -Level Info
                 Remove-VirtualSwitch -VirtualSwitch $VSwitch -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-                Write-Host "Deleting the VSwitch that was used to import OVA......" -ForegroundColor Green
+                Write-Log "Deleting the VSwitch that was used to import OVA......" -Path $LogFileName -Level Info
 
                 }
                                 
-                Write-host " Removing All VMs ......" -ForegroundColor Green
+                Write-Log " Removing All VMs ......" -Path $LogFileName -Level Info
 
-                if($SVM_Prexis -eq "NFS"){
+                if($SVM_Prefix -eq "NFS"){
                     foreach($Hostvdbench in $HostDataStores){
 
-                    Write-host " Removing NFS Datastore in "+$Hostvdbench.Name -ForegroundColor Green
+                    Write-Log " Removing NFS Datastore in "+$Hostvdbench.Name -Path $LogFileName -Level Info
 
                     Remove-Datastore -Datastore $DataStoreName -VMHost $Hostvdbench.Name -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
                     }
-                    }elseif($SVM_Prexis -eq "iSCSI"){
+                    }elseif($SVM_Prefix -eq "iSCSI"){
                     
-                    Write-host " Removing iSCSI Datastore.... " -ForegroundColor Green
+                    Write-Log " Removing iSCSI Datastore.... " -Path $LogFileName -Level Info
 
                     Remove-Datastore -Datastore $DataStoreName -VMHost $Global:config.Hosts.Host00.Name -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
                     
                     #Removing the iSCSI Targets from VCenter...
                             foreach($iSCSILIF in $Global:config.LIFSiSCSI.GetEnumerator()){
 
-                            Write-Host "Removing iSCSI Target on ESXi Servers: " -ForegroundColor Green
+                            Write-Log "Removing iSCSI Target on ESXi Servers: " -Path $LogFileName -Level Info
                             $iSCSILIFPort = $iSCSILIF.Value.IP+":3260"
                             Remove-IScsiHbaTarget -Target (Get-IScsiHbaTarget -Address $iSCSILIFPort -Type Send) -Confirm:$false -ErrorAction SilentlyContinue
 
@@ -2124,13 +2568,13 @@ Remove-OSCustomizationSpec -OSCustomizationSpec "$SVM_NAME*" -Confirm:$false | O
                             foreach($H in $Global:config.Hosts.GetEnumerator()){
  
                             $HostName = $H.Value.Name
-                            Write-Host "Refreshing HBAs on ESXi Server: $HostName" -ForegroundColor Green
+                            Write-Log "Refreshing HBAs on ESXi Server: $HostName" -Path $LogFileName -Level Info
                             Get-VMHostStorage -VMHost $HostName -Refresh -RescanAllHba | Out-Null
  
                             }
-                    }elseif($SVM_Prexis -eq "FCP"){
+                    }elseif($SVM_Prefix -eq "FCP"){
                     
-                    Write-host " Removing FCP Datastore.... " -ForegroundColor Green
+                    Write-Log " Removing FCP Datastore.... " -Path $LogFileName -Level Info
 
                     Remove-Datastore -Datastore $DataStoreName -VMHost $Global:config.Hosts.Host00.Name -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
                     
@@ -2138,7 +2582,7 @@ Remove-OSCustomizationSpec -OSCustomizationSpec "$SVM_NAME*" -Confirm:$false | O
                             foreach($H in $Global:config.Hosts.GetEnumerator()){
  
                             $HostName = $H.Value.Name
-                            Write-Host "Refreshing HBAs on ESXi Server: $HostName" -ForegroundColor Green
+                            Write-Log "Refreshing HBAs on ESXi Server: $HostName" -Path $LogFileName -Level Info
                             Get-VMHostStorage -VMHost $HostName -Refresh -RescanAllHba | Out-Null
  
                             }
@@ -2148,46 +2592,51 @@ Remove-OSCustomizationSpec -OSCustomizationSpec "$SVM_NAME*" -Confirm:$false | O
                    
             }else{
         
-        Write-host "The vdbench VMs and the NFS Datastore were not deleted"
+        Write-Log "The vdbench VMs and the NFS Datastore were not deleted"  -Path $LogFileName -Level Warn
         $continue = $true
         }
 
         }else{
         
-        Write-host " VMs cant be found as there is no DataStore called $DataStoreName "
+        Write-Log " VMs cant be found as there is no DataStore called $DataStoreName "  -Path $LogFileName -Level Warn
         
         }
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
+
 }
+#Logging hass been added to all commands
+Function Remove-ncVserverVD($SVM_Prefix) {
 
-Function Remove-ncVserverVD($SVM_Prexis) {
+$LogFileName = $Global:PathNameFiles[1]
 
-#Connecting to Netapp Controller.....
-$SVM_NAME = $Global:config.SVM.Name+$SVM_Prexis
+#Connecting to NetApp Controller.....
+$SVM_NAME = $Global:config.SVM.Name+"_"+$SVM_Prefix
 
-$ConnectionNetapp = ConnectNetapp $global:CurrentNcController
+$ConnectionNetApp = Connect-NetApp $global:CurrentNcController -LogFilePath $LogFileName
 
-if($ConnectionNetapp -eq "Stop"){
+if($ConnectionNetApp -eq "Stop"){
     
-    Write-Host "We failed to connected to Netapp Controller $global:CurrentNcController" -ForegroundColor Red
+    Write-Log "We failed to connected to NetApp Controller $global:CurrentNcController"  -Path $LogFileName -Level Error
     Return "CancelDeletionSVM"
     Break
 }
 
-       Write-host "Are you sure you want to Delete $SVM_NAME SVM with all volumes " -ForegroundColor Green
+       Write-Log "Are you sure you want to Delete $SVM_NAME SVM with all volumes " -Path $LogFileName -Level Warn
        $Creation = Read-Host "(No/yes)"
-        Write-Host "" 
+        Write-Log " " -Path $LogFileName -Level Info 
         if($Creation -eq "yes"){
          $Vservers = Get-NcVserver 
             if ($Vservers.Vserver -Notcontains "$SVM_NAME"){
-                    Write-Host "There is no SVM under the name vdbench, please create it by going to the main Menu "
+                    Write-Log "There is no SVM under the name vdbench, please create it by going to the main Menu " -Path $LogFileName -Level Warn
                     
                 }else{
-                      Write-Host "Deleting SVM vdbench.... " -ForegroundColor Green
+                      Write-Log "Deleting SVM vdbench.... " -Path $LogFileName -Level Info
                       $VolumesVserver = Get-NcVol -Vserver "$SVM_NAME" | ?{ $_.VolumeStateAttributes.IsVserverRoot -eq $false }
                       $RootVolume =  Get-NcVol -Vserver "$SVM_NAME" | ?{ $_.VolumeStateAttributes.IsVserverRoot -eq $true }
 
                                 foreach($Volume in $VolumesVserver){
-                                    Write-Host "Deleting Data Volume $Volume.... " -ForegroundColor Green
+                                    Write-Log "Deleting Data Volume $Volume.... " -Path $LogFileName -Level Info
                                     Dismount-NcVol -Name $Volume.Name -Force -VserverContext "$SVM_NAME" -Confirm:$false | Out-Null
                                     Set-NcVol $Volume.Name -VserverContext "$SVM_NAME" -Offline -Confirm:$false | Out-Null
                                     Remove-NcVol $Volume.Name -VserverContext "$SVM_NAME" -Confirm:$false | Out-Null
@@ -2203,14 +2652,17 @@ if($ConnectionNetapp -eq "Stop"){
                 Remove-NcVserver -Name "$SVM_NAME" -Confirm:$false | Out-Null
                
         }else{
-        Write-host "The SVM vdbench was not deleted"
+        Write-Log "The SVM vdbench was not deleted" -Path $LogFileName -Level Warn
        
         $continue = $true
      }
-      Clear-Host
+
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
+Clear-Host
       
 }
-
+#Logging hass been added to all commands
 Function PS-VersionCheck{
 
 $PSVersion = $PSversiontable.PSVersion
@@ -2227,8 +2679,13 @@ return $false
 
 
 }
-
+#Logging hass been added to all commands
 Function PowerCLI-VersionCheck{
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
+
+$LogFileName = "PreChecks_Log.log" 
   
 $PowerCLIVersion = Get-Module -Name VMware.PowerCLI -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
 $PowerCLIVersion = $PowerCLIVersion.Version
@@ -2236,7 +2693,6 @@ $PowerCLIVersion = $PowerCLIVersion.Version
 if($PowerCLIVersion.Major -ge 6){
 
 return $true
-Write-Host "True....."
 
 }else{
 
@@ -2244,10 +2700,14 @@ return $false
 
 }
 
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-
+#Logging hass been added to all commands
 Function POSH-SHH-VersionCheck{
+
+$LogFileName = "PreChecks_Log.log"
 
 $PSSHHVersion = Get-Module -Name Posh-SSH -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
 $PSSHHVersion = $PSSHHVersion.Version
@@ -2262,10 +2722,14 @@ return $false
 
 }
 
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
+#Logging hass been added to all commands
+Function PSNetAppToolKit-VersionCheck{
 
-Function PSNetappToolKit-VersionCheck{
+$LogFileName = "PreChecks_Log.log"
 
 $OntapDataVersion = Get-NaToolkitVersion -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
 
@@ -2279,10 +2743,19 @@ return $false
 
 }
 
-}
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
+}
+#Logging hass been added to all commands
 Function VSwitch-Check($ESXiHost){
 
+# $Global:PathNameFiles is an array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
+
+$ConfigFilePath = $Global:PathNameFiles[0]
+$LogFileName = $Global:PathNameFiles[1]
 
 $VMNetwork = Get-VirtualPortGroup -Name "VM Network" -VMHost $ESXiHost -ErrorAction SilentlyContinue
 
@@ -2296,12 +2769,16 @@ return $false
 
 }
 
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-
+#Logging hass been added to all commands
 Function Pre-Checks{
 
-Write-Host "Checking Powershell Version....." -ForegroundColor Green
+$LogFileName = "PreChecks_Log.log"
+
+Write-Log "Checking Powershell Version....." -Path $LogFileName -Level Info
 
 $PSVersion = $PSversiontable.PSVersion
 
@@ -2311,12 +2788,12 @@ $PSVersion = $PSversiontable.PSVersion
     $PSSHHVersion = Get-Module -Name Posh-SSH -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
     $PSSHHVersion = $PSSHHVersion.Version
     
-    Write-Host "Current version $PSVersion of PowerShell is supported...." -ForegroundColor Green
+    Write-Log "Current version $PSVersion of PowerShell is supported...." -Path $LogFileName -Level Info
 
     }else{
     
-    Write-Host "Current version $PSVersion of Powershell is not supported...." -ForegroundColor Red
-    Write-Host "Please install POSH Version 5, restart the computer and relaunch the script.... " -ForegroundColor Red
+    Write-Log "Current version $PSVersion of Powershell is not supported...." -Path $LogFileName -Level Error
+    Write-Log "Please install POSH Version 5, restart the computer and relaunch the script.... " -Path $LogFileName -Level Error
     [void][System.Console]::ReadKey($true)
     Exit
 
@@ -2324,11 +2801,11 @@ $PSVersion = $PSversiontable.PSVersion
 
     if(PowerCLI-VersionCheck){
     
-    Write-Host "Current version $PowerCLIVersion of PowerCLI is supported...." -ForegroundColor Green
+    Write-Log "Current version $PowerCLIVersion of PowerCLI is supported...." -Path $LogFileName -Level Info
     
     }else{
     
-    Write-Host "Current version $PowerCLIVersion of PowerCLI is not supported or PowerCLI is not installed...." -ForegroundColor Red
+    Write-Log "Current version $PowerCLIVersion of PowerCLI is not supported or PowerCLI is not installed...." -Path $LogFileName -Level Error
     $Install = Read-Host "Do you want to install the lastest version? yes/no "
             if($Install -eq "yes"){
     
@@ -2338,7 +2815,7 @@ $PSVersion = $PSversiontable.PSVersion
 
             }else{
             
-            Write-Host "PowerCLI was not installed.... " -ForegroundColor Red
+            Write-Log "PowerCLI was not installed.... " -Path $LogFileName -Level Error
             [void][System.Console]::ReadKey($true)
             Exit
 
@@ -2348,9 +2825,9 @@ $PSVersion = $PSversiontable.PSVersion
 
     if(POSH-SHH-VersionCheck){
     $OntapDataVersion = Get-NaToolkitVersion -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
-    Write-Host "Current version $PSSHHVersion of POSH-SSH is supported...." -ForegroundColor Green
+    Write-Log "Current version $PSSHHVersion of POSH-SSH is supported...." -Path $LogFileName -Level Info
     }else{
-    Write-Host "Current version $PSSHHVersion of POSH-SSH is not supported or POSH-SSH is not even installed...." -ForegroundColor Red
+    Write-Log "Current version $PSSHHVersion of POSH-SSH is not supported or POSH-SSH is not even installed...." -Path $LogFileName -Level Error
     $Install = Read-Host "Do you want to install the lastest version? yes/no "
             if($Install -eq "yes"){
     
@@ -2360,7 +2837,7 @@ $PSVersion = $PSversiontable.PSVersion
 
             }else{
             
-            Write-Host "POSH-SSH was not installed.... " -ForegroundColor Red
+            Write-Log "POSH-SSH was not installed.... " -Path $LogFileName -Level Error
             [void][System.Console]::ReadKey($true)
             Exit
             }
@@ -2368,20 +2845,23 @@ $PSVersion = $PSversiontable.PSVersion
     }
 
 
-    if(PSNetappToolKit-VersionCheck){
+    if(PSNetAppToolKit-VersionCheck){
     
-    Write-Host "Current version $OntapDataVersion of NetApp Powershell tool kit is supported...." -ForegroundColor Green
+    Write-Log "Current version $OntapDataVersion of NetApp Powershell tool kit is supported...." -Path $LogFileName -Level Info
     
     }else{
     
-    Write-Host "Current version $OntapDataVersion of NetApp Powershell tool kit is not supported or it is not installed...." -ForegroundColor Red
-    Write-Host "Please install the latest version NetApp Powershell tool kit and relaunch the script.... " -ForegroundColor Red
+    Write-Log "Current version $OntapDataVersion of NetApp Powershell tool kit is not supported or it is not installed...." -Path $LogFileName -Level Error
+    Write-Log "Please install the latest version NetApp Powershell tool kit and relaunch the script.... " -Path $LogFileName -Level Error
     [void][System.Console]::ReadKey($true)
     Exit
     
     }
-}
+#Adding Error to Log File
+if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
+}
+#Logging hass been added to all commands
 Function GenerateConfigFile{
 
 $RawXAML  = @"
@@ -3074,7 +3554,15 @@ $Global.LIFSFC.lif12.Add('Port',$DATAFCLIF2PORTNODE2TextBox.Text)
 $Global.VMs = @{}
 $Global.VMs.VM00 = @{}
 
-$Global.VMs.VM00.Add('Name',$SVMNameTextBox.Text+"_Test00")
+if($NFSRadioButton.IsChecked){
+$SVM_Prefix = "NFS"
+}elseif($iSCSIRadioButton.IsChecked){
+$SVM_Prefix = "iSCSI"
+}elseif($FCRadioButton.IsChecked){
+$SVM_Prefix = "FCP"
+}
+
+$Global.VMs.VM00.Add('Name',$SVMNameTextBox.Text+"_"+$SVM_Prefix+"_00")
 $Global.VMs.VM00.Add('IP',$VMIPAddressTextBox0.Text)
 $Global.VMs.VM00.Add('Gateway',$VMGatewayTextBox.Text)
 $Global.VMs.VM00.Add('Netmask',$VMNetmaskTextBox.Text)
@@ -3085,7 +3573,7 @@ $NameVariableVM = 'VM0'+$Count
 
 $Global.VMs.$NameVariableVM = @{} 
 
-$Global.VMs.$NameVariableVM.Add('Name',$SVMNameTextBox.Text+"_Test0"+$Count)
+$Global.VMs.$NameVariableVM.Add('Name',$SVMNameTextBox.Text+"_"+$SVM_Prefix+"_0"+$Count)
 
 $NameVariableIP = 'VMIPAddressTextBox'+$Count
 $NameVariableIPText = $VMExpanderGrid.Children | ?{$_.Name -eq $NameVariableIP }
@@ -3124,7 +3612,7 @@ $SaveFileDialog.ShowHelp = $True
 $result = $SaveFileDialog.ShowDialog()    
 $result 
     if($result -eq "OK")    {    
-            Write-Host "Location to Save the config file :"  -ForegroundColor Green  
+            Write-Host "Location to Save the config file :" -ForegroundColor Green  
             $SaveFileDialog.filename   
         } 
         else { Write-Host "File Save Dialog Cancelled!" -ForegroundColor Yellow} 
@@ -3142,9 +3630,14 @@ $SVMConfigurationExpander.RenderTransform = New-Object System.Windows.Media.Tran
 
 $InputConfigFile = Get-FileName ".\" ps1
 
-if($InputConfigFile){
+# $InputConfigFile is an array
+# $InputConfigFile[0] is the Configuratiton path.
 
-$GlobalObject = Get-Content -Path $InputConfigFile -Raw -ErrorAction SilentlyContinue | ConvertFrom-JSON
+$ConfigFilePath = $InputConfigFile[0]
+
+if($ConfigFilePath){
+
+$GlobalObject = Get-Content -Path $ConfigFilePath -Raw -ErrorAction SilentlyContinue | ConvertFrom-JSON
 
 $NumberofVolumesPerVMTextBox.Text =  $GlobalObject.Other.NumberofVolumesPerVM.Trim()
 $VCenterIPTextBox.Text = $GlobalObject.Other.VCenterIP.Trim()
@@ -3233,9 +3726,6 @@ $Initial = 0
 Set-Variable -Name HostCounter -Value $Initial -Scope Global
 Set-Variable -Name VMCounter -Value $Initial -Scope Global
 Set-Variable -Name VMY -Value $Initial -Scope Global
-
-
-
 
 $VMs = $GlobalObject | select -Expand VMs
 
@@ -3494,9 +3984,6 @@ $SVMNameTextBox.Add_GotFocus({
 })
 
 
-
-
-
 ##############################################
 $NFSLIFIPTextBox.Add_GotFocus({
   if($NFSLIFIPTextBox.Tag -eq $null) { # clear the text box
@@ -3574,7 +4061,6 @@ $DATANFSLIFNETMASKTextBox.Add_GotFocus({
     $DATANFSLIFNETMASKTextBox.Tag = 'cleared' # use any text you want to indicate that its cleared
   }
 })
-
 
 $DATANFSLIFIP1TextBox.Add_GotFocus({
   if($DATANFSLIFIP1TextBox.Tag -eq $null) { # clear the text box
@@ -3758,7 +4244,6 @@ $VMGatewayTextBox.Add_GotFocus({
   }
 })
 
-
 $VMNetmaskTextBox.Add_GotFocus({
   if($VMNetmaskTextBox.Tag -eq $null) { # clear the text box
     $VMNetmaskTextBox.Text = ' '
@@ -3779,7 +4264,6 @@ $NFSIPCONFIGURATIONExpander.IsExpanded = $false
 $FCDATASTORECONFIGURATIONExpander.IsExpanded = $false
 $DATANFSIPCONFIGURATIONExpander.IsExpanded = $false
 $iSCSIIPCONFIGURATIONExpander.IsExpanded = $false
-
 
 #Expander VMWare Configuration when is closing...
 $VMWareConfigurationExpander.Add_Collapsed({
@@ -3895,7 +4379,6 @@ $iSCSIIPCONFIGURATIONExpander.RenderTransform = New-Object System.Windows.Media.
 
 })
 
-
 $FCDATASTORECONFIGURATIONExpander.Add_Collapsed({
 #Raises the Collapsed event when the IsExpanded property changes from true to false. Expander is closing.. 
 
@@ -3949,7 +4432,6 @@ $iSCSIIPCONFIGURATIONExpander.RenderTransform = New-Object System.Windows.Media.
 
 
 })
-
 
 $DATANFSIPCONFIGURATIONExpander.Add_Collapsed({
 #Raises the Collapsed event when the IsExpanded property changes from true to false. Expander is closing.. 
@@ -4064,7 +4546,6 @@ $SVMConfigurationExpander.RenderTransform = New-Object System.Windows.Media.Tran
 
 })
 
-
 $NFSRadioButton.Add_Checked({
 
 $FCLIFPORTDATASTORETextBox.IsEnabled = $false
@@ -4113,7 +4594,6 @@ $LunIDTextBox.IsEnabled = $false
 
 })
 
-
 $iSCSIRadioButton.Add_Checked({
 
 $FCLIFPORTDATASTORETextBox.IsEnabled = $false
@@ -4160,7 +4640,6 @@ $FileSizeTextBox.IsEnabled = $false
 $LunIDTextBox.IsEnabled = $true
 
 })
-
 
 $FCRadioButton.Add_Checked({
 
@@ -4209,8 +4688,6 @@ $LunIDTextBox.IsEnabled = $true
 
 })
 
-
-
 $DSwitchRadioButton.Add_Checked({
 
 $NetworkNameTextBox.IsEnabled = $true
@@ -4225,13 +4702,7 @@ $PortGroupNameTextBox.IsEnabled = $true
 
 })
 
-
-
-
 $Window.showdialog()
-
-
-
 
 }
 

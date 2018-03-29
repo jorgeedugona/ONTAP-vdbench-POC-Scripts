@@ -1,5 +1,12 @@
 {
     "LIFSNFS":  {
+                    "lif1":  {
+                                 "Netmask":  "Enter Netmask for NFS traffic...",
+                                 "Port":  "Enter 10GbE port node 1...",
+                                 "IP":  "Enter IP Address 1 ...",
+                                 "Name":  "vdbench_GUI_nfs_node01-lif-1",
+                                 "Gateway":  "Enter Gateway for NFS traffic..."
+                             },
                     "lif3":  {
                                  "Netmask":  "Enter Netmask for NFS traffic...",
                                  "Port":  "Enter 10GbE port node 2...",
@@ -14,13 +21,6 @@
                                  "Name":  "vdbench_GUI_nfs_node01-lif-2",
                                  "Gateway":  "Enter Gateway for NFS traffic..."
                              },
-                    "lif1":  {
-                                 "Netmask":  "Enter Netmask for NFS traffic...",
-                                 "Port":  "Enter 10GbE port node 1...",
-                                 "IP":  "Enter IP Address 1 ...",
-                                 "Name":  "vdbench_GUI_nfs_node01-lif-1",
-                                 "Gateway":  "Enter Gateway for NFS traffic..."
-                             },
                     "lif4":  {
                                  "Netmask":  "Enter Netmask for NFS traffic...",
                                  "Port":  "Enter 10GbE port node 2...",
@@ -32,13 +32,13 @@
     "Other":  {
                   "iSCSI":  false,
                   "PortGroupName":  "Enter the Network Name of the DVSwitch...",
-                  "NumberofVolumesPerVM":  "4",
-                  "FileSize":  "Enter file size..",
                   "NetworkName":  "DPortGroup VM Network",
+                  "FileSize":  "Enter file size..",
                   "Pathvdbench":  "C:\\Users\\Administrator\\Desktop\\poc-toolkit-Netappv1\\vdbench50406.zip",
                   "LunID":  "200",
                   "ClusterIP":  "192.168.0.100",
                   "Jumbo":  false,
+                  "NumberofVolumesPerVM":  "4",
                   "FC":  true,
                   "VCenterIP":  "192.168.0.150",
                   "PathOVA":  "C:\\Users\\Administrator\\Desktop\\poc-toolkit-Netappv1\\vdbench-template.ova",
@@ -48,11 +48,11 @@
                   "VolumeSize":  "126"
               },
     "LIFSiSCSI":  {
-                      "lif6":  {
+                      "lif7":  {
                                    "Netmask":  "Enter Netmask...",
                                    "Port":  "Enter 10GbE port...",
                                    "IP":  "Enter IP Address...",
-                                   "Name":  "vdbench_GUI_iscsi_node01-lif-2",
+                                   "Name":  "vdbench_GUI_iscsi_node02-lif-1",
                                    "Gateway":  "Enter Gateway..."
                                },
                       "lif5":  {
@@ -69,17 +69,17 @@
                                    "Name":  "vdbench_GUI_iscsi_node02-lif-2",
                                    "Gateway":  "Enter Gateway..."
                                },
-                      "lif7":  {
+                      "lif6":  {
                                    "Netmask":  "Enter Netmask...",
                                    "Port":  "Enter 10GbE port...",
                                    "IP":  "Enter IP Address...",
-                                   "Name":  "vdbench_GUI_iscsi_node02-lif-1",
+                                   "Name":  "vdbench_GUI_iscsi_node01-lif-2",
                                    "Gateway":  "Enter Gateway..."
                                }
                   },
     "Hosts":  {
-                  "Host02":  {
-                                 "Name":  "x3550-m3-31.cpoc.local"
+                  "Host03":  {
+                                 "Name":  "x3550-m3-53.cpoc.local"
                              },
                   "Host00":  {
                                  "Name":  "x3550-m3-50.cpoc.local"
@@ -87,11 +87,11 @@
                   "Host01":  {
                                  "Name":  "x3550-m3-52.cpoc.local"
                              },
+                  "Host02":  {
+                                 "Name":  "x3550-m3-31.cpoc.local"
+                             },
                   "Host04":  {
                                  "Name":  "x3550-m3-51.cpoc.local"
-                             },
-                  "Host03":  {
-                                 "Name":  "x3550-m3-53.cpoc.local"
                              }
               },
     "VMsLIF":  {
@@ -108,44 +108,44 @@
                             }
                },
     "VMs":  {
-                "VM01":  {
-                             "IP":  "192.168.0.61",
-                             "Name":  "vdbench_GUI_Test01"
-                         },
-                "VM02":  {
-                             "IP":  "192.168.0.62",
-                             "Name":  "vdbench_GUI_Test02"
+                "VM04":  {
+                             "IP":  "192.168.0.64",
+                             "Name":  "vdbench_GUI_FCP_04"
                          },
                 "VM03":  {
                              "IP":  "192.168.0.63",
-                             "Name":  "vdbench_GUI_Test03"
+                             "Name":  "vdbench_GUI_FCP_03"
                          },
-                "VM04":  {
-                             "IP":  "192.168.0.64",
-                             "Name":  "vdbench_GUI_Test04"
+                "VM01":  {
+                             "IP":  "192.168.0.61",
+                             "Name":  "vdbench_GUI_FCP_01"
+                         },
+                "VM02":  {
+                             "IP":  "192.168.0.62",
+                             "Name":  "vdbench_GUI_FCP_02"
                          },
                 "VM00":  {
                              "Netmask":  "255.255.255.0",
                              "IP":  "192.168.0.60",
-                             "Name":  "vdbench_GUI_Test00",
+                             "Name":  "vdbench_GUI_FCP_00",
                              "Gateway":  "192.168.0.1"
                          }
             },
     "LIFSFC":  {
-                   "lif11":  {
-                                 "Name":  "vdbench_GUI_FC_node02-lif-1",
-                                 "Port":  "0e"
-                             },
                    "lif9":  {
                                 "Name":  "vdbench_GUI_FC_node01-lif-1",
                                 "Port":  "0e"
                             },
-                   "lif10":  {
-                                 "Name":  "vdbench_GUI_FC_node01-lif-2",
-                                 "Port":  "0f"
-                             },
                    "lif12":  {
                                  "Name":  "vdbench_GUI_FC_node02-lif-2",
+                                 "Port":  "0f"
+                             },
+                   "lif11":  {
+                                 "Name":  "vdbench_GUI_FC_node02-lif-1",
+                                 "Port":  "0e"
+                             },
+                   "lif10":  {
+                                 "Name":  "vdbench_GUI_FC_node01-lif-2",
                                  "Port":  "0f"
                              }
                },

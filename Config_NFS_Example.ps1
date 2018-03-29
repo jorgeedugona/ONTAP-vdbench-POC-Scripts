@@ -32,13 +32,13 @@
     "Other":  {
                   "iSCSI":  false,
                   "PortGroupName":  "",
-                  "NumberofVolumesPerVM":  "4",
-                  "FileSize":  "5",
                   "NetworkName":  "Public",
+                  "FileSize":  "5",
                   "Pathvdbench":  "C:\\Users\\Administrator\\Desktop\\vdbench50406.zip",
                   "LunID":  "",
                   "ClusterIP":  "192.168.0.59",
                   "Jumbo":  true,
+                  "NumberofVolumesPerVM":  "4",
                   "FC":  false,
                   "VCenterIP":  "192.168.0.20",
                   "PathOVA":  "C:\\Users\\Administrator\\Desktop\\poc-toolkit-NetAppv1.0\\OVA\\vdbench-template.ova",
@@ -110,24 +110,24 @@
     "VMs":  {
                 "VM04":  {
                              "IP":  "192.168.0.48",
-                             "Name":  "vdbench_GUI_Test04"
+                             "Name":  "vdbench_GUI_NFS_04"
                          },
                 "VM03":  {
                              "IP":  "192.168.0.47",
-                             "Name":  "vdbench_GUI_Test03"
+                             "Name":  "vdbench_GUI_NFS_03"
                          },
                 "VM01":  {
                              "IP":  "192.168.0.45",
-                             "Name":  "vdbench_GUI_Test01"
+                             "Name":  "vdbench_GUI_NFS_01"
                          },
                 "VM02":  {
                              "IP":  "192.168.0.46",
-                             "Name":  "vdbench_GUI_Test02"
+                             "Name":  "vdbench_GUI_NFS_02"
                          },
                 "VM00":  {
                              "Netmask":  "255.255.255.0",
                              "IP":  "192.168.0.44",
-                             "Name":  "vdbench_GUI_Test00",
+                             "Name":  "vdbench_GUI_NFS_00",
                              "Gateway":  "192.168.0.1"
                          }
             },

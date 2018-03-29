@@ -239,7 +239,17 @@ $ModuleFunctions = Get-Module -Name Functions-A200
 
 $RunButton.Add_Click({
 
+$LogFile = "PreChecks_Log.log"
+
+if (!(Test-Path $LogFile)) { 
+   Write-Verbose "Creating $LogFile ."
+   $NewLogFile = New-Item $LogFile -Force -ItemType File 
+}else{
+   Clear-Content -Path $LogFile -Force -Confirm:$false
+}
+
 Pre-Checks
+
 
 })
 
@@ -255,9 +265,26 @@ GenerateConfigFile
 
 $ImportButton.Add_Click({
 
-$Global:ConfigFile = Get-FileName $PSScriptRoot "ps1"
-if($Global:ConfigFile){
-Import-ConfigFile $Global:ConfigFile
+$Global:PathNameFiles = Get-FileName $PSScriptRoot "ps1"
+
+# $Global:PathNameFiles is an Array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
+
+if($Global:PathNameFiles[0]){
+
+$LogFilePath = $Global:PathNameFiles[1]
+
+if (!(Test-Path $LogFilePath)) { 
+   Write-Verbose "Creating $LogFilePath ."
+   $NewLogFile = New-Item $LogFilePath -Force -ItemType File 
+}else{
+   Clear-Content -Path $LogFilePath -Force -Confirm:$false
+}
+
+#Importing the configuration file
+Import-ConfigFile $Global:PathNameFiles
+            
  }else{
 Write-Warning "There was no file selected..."
 }
@@ -267,9 +294,13 @@ Write-Warning "There was no file selected..."
 
 $DeployButton.Add_Click({
 
-if($Global:ConfigFile){
-Write-Host $Global:ConfigFile
-$ReturnConfig = Configfile $PSScriptRoot
+# $Global:PathNameFiles is an Array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
+
+if($Global:PathNameFiles[0]){
+Write-Host $Global:PathNameFiles[0]
+$ReturnConfig = Configfile $Global:PathNameFiles
 if($ReturnConfig -eq "FailConnection"){
 Write-Host "Try to redeploy the environment again... " -ForegroundColor Red
 }
@@ -283,11 +314,15 @@ Write-Warning "There was no file selected..."
 
 $DeleteButtton.Add_Click({
 
-Write-Host " Select the config that you want to delete... " -ForegroundColor Green
-$Global:ConfigFile = Get-FileName $PSScriptRoot "ps1"
+# $Global:PathNameFiles is an Array
+# $Global:PathNameFiles[0] is the Configuratiton path.
+# $Global:PathNameFiles[1] is the log name.
 
-if($Global:ConfigFile){
-Import-ConfigFile $Global:ConfigFile
+Write-Host " Select the config that you want to delete... " -ForegroundColor Green
+$Global:PathNameFiles = Get-FileName $PSScriptRoot "ps1"
+
+if($Global:PathNameFiles[0]){
+Import-ConfigFile $Global:PathNameFiles
 if($Global:config.Other.NFS){
 $SVM_Prexis = "NFS"
 }elseif($Global:config.Other.iSCSI){
@@ -305,11 +340,10 @@ Write-Warning "Deletion of the Netapp was cancelled.... "
 }
 }
 
+Write-Log "Decommission has Finished......" -Path $Global:PathNameFiles[1] -Level Info
 
-
-Write-Host "Decommission has Finished......" -ForegroundColor Green
 }else{
-Write-Host "Decommission was cancelled ... " -ForegroundColor Green
+Write-Log "Decommission was cancelled ... " -Path $Global:PathNameFiles[1] -Level Error
 }
 
 
