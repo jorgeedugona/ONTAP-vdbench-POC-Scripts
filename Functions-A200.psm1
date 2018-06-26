@@ -1,5 +1,28 @@
-﻿# ALL Functions
-#Logging hass been added to all commands
+﻿##########################################################
+##########################################################
+##########################################################
+# Copyright (c) 2018 NetApp, Inc. All rights reserved.
+# Specifications subject to change without notice.
+#
+# This sample code is provided AS IS, with no support or
+# warranties of any kind, including but not limited to
+# warranties of merchantability or fitness of any kind,
+# expressed or implied.
+# 
+# PowerShell Version = 5.0
+# NetApp Powershell toolkit = 4.5 
+# Min Ontap Version = 9.0
+# Min ESXi Version = 6.0
+# vdbench Version = 5.04.06
+# PowerCLI Version = 6.5
+# POSHSSH Version = 1.7.7
+#
+#
+# Author: Jorge E Gomez Navarrete gjorge@netapp.com
+##########################################################
+##########################################################
+##########################################################
+ 
 Function Configfile($Global:PathNameFiles){
 
 # $Global:PathNameFiles is an array
@@ -34,7 +57,7 @@ Write-Log " " -Path $LogFileName -Level Warn
 }
 
 }
-#Logging hass been added to all commands
+ 
 Function NFSDeployment{
 
 # $Global:PathNameFiles is an array
@@ -147,7 +170,7 @@ Write-Log "Creating vdbench Files......" -Path $LogFileName -Level Info
 
 vdbench-Files2($SVM_Prefix)
 }
-#Logging hass been added to all commands
+ 
 Function iSCSIDeployment{
 
 # $Global:PathNameFiles is an array
@@ -261,7 +284,7 @@ vdbench-Files2($SVM_Prefix)
 
 
 }
-#Logging hass been added to all commands
+ 
 Function FCPDeployment{
 
 # $Global:PathNameFiles is an array
@@ -378,7 +401,7 @@ vdbench-Files2($SVM_Prefix)
 Write-Log "Deployment has Finished......" -Path $LogFileName -Level Info
 
 } 
- #Logging hass been added to all commands
+  
 Function Write-Log { 
     [CmdletBinding()] 
     Param 
@@ -461,7 +484,7 @@ Function Write-Log {
     { 
     } 
 }
-#Logging hass been added to all commands
+ 
 function Import-ConfigFile ($Global:PathNameFiles){
 
 # $Global:PathNameFiles is an array
@@ -786,7 +809,7 @@ $num++
 Write-Log "Config File was successfully Imported......" -Path $LogFileName -Level Info
 
 }
-#Logging hass been added to all commands
+ 
 function Connect-Vcenter {
      [CmdletBinding()]
      Param(
@@ -845,7 +868,7 @@ function Connect-Vcenter {
    }
 
 }
-#Logging hass been added to all commands
+ 
 function Connect-NetApp {
      [CmdletBinding()]
      Param(
@@ -893,7 +916,7 @@ $ipCluster = $Global:config.Other.ClusterIP
 
 
 }
-#Logging hass been added to all commands
+ 
 Function New-ncVserverVD2 ($SVM_Prefix) {
 
    # $Global:PathNameFiles is an array
@@ -945,7 +968,7 @@ Function New-ncVserverVD2 ($SVM_Prefix) {
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
    
 }
-#Logging hass been added to all commands
+ 
 Function DataStoreLifs($SVM_Prefix){
 
 $SVM_NAME = $Global:config.SVM.Name+"_"+$SVM_Prefix
@@ -1000,7 +1023,7 @@ $CurrentLifs = Get-NcNetInterface -Vserver $SVM_NAME -Name "$SVM_NAME*" -ErrorVa
     if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-#Logging hass been added to all commands
+ 
 Function DataLifsSVM($SVM_Prefix) {
 
 # $Global:PathNameFiles is an array
@@ -1104,7 +1127,7 @@ if($SVM_Prefix -eq "NFS"){
   if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
   
 }
-#Logging hass been added to all commands
+ 
 Function Mount-iSCSI-FCP-Datastore2($SVM_Prefix){
 
 # $Global:PathNameFiles is an array
@@ -1138,7 +1161,23 @@ $DataStoreName = $Global:config.VMsLIF.lif1.Name
 
     if($LifStatus.OpStatus -eq "up"){
 
-        $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
+        do{
+
+        $Global:DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
+
+        if($Global:DataAggr.Length -gt 2){
+
+        Write-Log "There are more than 2 data aggregates, please select two...." -Path $LogFileName -Level Info
+        $Global:DataAggr = $Global:DataAggr | Out-GridView -OutputMode Multiple -Title "Select two Data Aggregates"
+
+        if(!($Global:DataAggr.Length -eq 2)){
+
+        Write-Log "You have selected an incorrect number of data aggreggates, please select only TWO...." -Path $LogFileName -Level Warn 
+
+        }
+        }}while(!($Global:DataAggr.Length -eq 2))
+        $DataAggr = $Global:DataAggr
+
         $AggrName = $DataAggr[0].Name
         $Path = '/vol/'+$DataStoreName+'/'+$DataStoreName
         #Calculating the size of the Datastore based on the number of VMs needed.
@@ -1246,7 +1285,7 @@ $DataStoreName = $Global:config.VMsLIF.lif1.Name
      #Adding Error to Log File $Err or $Error
     if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 }
-#Logging hass been added to all commands
+ 
 Function Get-LunID {
 
 $report = Get-VMHost -State Connected | %{
@@ -1278,7 +1317,7 @@ $report = Get-VMHost -State Connected | %{
 return $report
 
 }
-#Logging hass been added to all commands
+ 
 Function Mount-NFSDatastore2($SVM_Prefix) {
 
 # $Global:PathNameFiles is an array
@@ -1336,7 +1375,26 @@ $LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreNa
                            -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
 
         }
-        $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
+
+        do{
+
+        $Global:DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
+
+        if($Global:DataAggr.Length -gt 2){
+
+        Write-Log "There are more than 2 data aggregates, please select two...." -Path $LogFileName -Level Info
+        $Global:DataAggr = $Global:DataAggr | Out-GridView -OutputMode Multiple -Title "Select two Data Aggregates"
+
+        if(!($Global:DataAggr.Length -eq 2)){
+
+        Write-Log "You have selected an incorrect number of data aggreggates, please select only TWO...." -Path $LogFileName -Level Warn 
+
+        }
+        }}while(!($Global:DataAggr.Length -eq 2))
+
+        $DataAggr = $Global:DataAggr
+
+
         $vdbenchVol = Get-NcVol -Name $DataStoreName -Vserver "$SVM_NAME"
 
                 if ($vdbenchVol){
@@ -1418,7 +1476,7 @@ $LifStatus = Get-NcNetInterface -Vserver "$SVM_NAME" -InterfaceName $DataStoreNa
 if($Error.Count -gt 0) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-#No need for logging.. 
+ 
 Function Get-FileName($initialDirectory, [string]$ExtentionFile){
     [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null
     
@@ -1445,7 +1503,7 @@ Function Get-FileName($initialDirectory, [string]$ExtentionFile){
     
 
 }
-#Logging hass been added to all commands
+ 
 Function Import-OVA2($CurrentPath, $SVM_Prefix){
 
 # $Global:PathNameFiles is an array
@@ -1530,7 +1588,7 @@ if (!(Test-Path $inputova)) {
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-#Logging hass been added to all commands
+ 
 Function Create-NFSVol2{
 
 # $Global:PathNameFiles is an array
@@ -1578,9 +1636,8 @@ $BooleanValue = $strNumberofVolumesPerVM -match "^[0-9]{1,4}"
 $HasValue = $Matches
 $StrValue = $HasValue.Values
 [int]$NumberofVolumesPerVM = [convert]::ToInt32($StrValue, 10)
+$DataAggr = $Global:DataAggr
 
-
-$DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
     Write-Log "$NumberofVolumesPerVM $SVM_Prefix Volumes per VM will be created, and the distribution " -Path $LogFileName -Level Info
     Write-Log "will be acrossed TWO Data Aggregates " -Path $LogFileName -Level Info
     Write-Log "Number of vdbench VMs " $Global:config.VMs.Count -Path $LogFileName -Level Info
@@ -1589,8 +1646,10 @@ $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
     $VMCount = $Global:config.VMs.Count
     $numberVOLS = $VMCount*$NumberofVolumesPerVM
     Write-Log "Total number of NFS Vols: " $numberVOLS -Path $LogFileName -Level Info
-    $Continue_NFSVOLS = read-host "Please press 'c' to continue, type 'exit' to return to the main menu... "
-            if($Continue_NFSVOLS -eq 'c'){
+            
+            do{
+            $Continue_NFSVOLS = read-host "Please press 'c' to continue, type 'exit' to return to the main menu... "
+            if($Continue_NFSVOLS -eq "c"){
                        #Big for loop for each Host
                        ForEach($item in $Global:config.VMs.GetEnumerator()){
                        #Loop for Each Aggregate
@@ -1624,16 +1683,14 @@ $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
                  Return "CancelNFSVols"
                  Break
              }else{
-                Write-Log "Creation of the NFS Vols was stopped, you can delete what was deployed up to this point by choosing " -Path $LogFileName -Level Warn
-                Write-Log "the Delete option from the main Menu and selecting the config file. " -Path $LogFileName -Level Warn
-                Return "CancelNFSVols"
-                Break
+                Write-Log "Incorrect option selected, please enter 'c' to continue or 'exit' to return to the main menu..."  -Path $LogFileName -Level Warn
              }
+             }While(!(($Continue_NFSVOLS -eq "c") -or ($Continue_NFSVOLS -eq "exit") ))
 
 #Adding Error to Log File $Err or $Error
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 }
-#Logging hass been added to all commands
+ 
 Function Create-iSCSI-FC-Lun2($SVM_Prefix){
 
 # $Global:PathNameFiles is an array
@@ -1685,7 +1742,8 @@ $HasValue = $Matches
 $StrValue = $HasValue.Values
 [int]$NumberofVolumesPerVM = [convert]::ToInt32($StrValue, 10)
 
-$DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
+$DataAggr = $Global:DataAggr
+
     Write-Log "$NumberofVolumesPerVM $SVM_Prefix LUNs per VM will be created, and the distribution " -Path $LogFileName -Level Info
     Write-Log "will be acrossed TWO Data Aggregates " -Path $LogFileName -Level Info
     Write-Log "Number of vdbench VMs " $Global:config.VMs.Count -Path $LogFileName -Level Info
@@ -1702,7 +1760,9 @@ $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
     $VMCount = $Global:config.VMs.Count
     $numberVOLS = $VMCount*$NumberofVolumesPerVM
     Write-Log "Total number of $SVM_Prefix LUNs: " $numberVOLS -Path $LogFileName -Level Info
-    $Continue_LUNsVOLS = read-host "Please press 'c' to continue, type 'exit' to return to the main menu... "
+            
+            do{
+            $Continue_LUNsVOLS = read-host "Please press 'c' to continue, type 'exit' to return to the main menu... "
             if($Continue_LUNsVOLS -eq 'c'){
                        #Big for loop for each Host
                        $LunID = $LunID + 1
@@ -1744,15 +1804,12 @@ $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
               Return "CancelLunsVols"
               Break
              }else{
-              Write-Log "Creation of the LUNs Vols was stopped, you can delete what was deployed up to this point by choosing " -Path $LogFileName -Level Warn
-              Write-Log "the Delete option from the main Menu and selecting the config file. " -Path $LogFileName -Level Warn
-              Return "CancelLunsVols"
-              Break
+
+              Write-Log "Incorrect option selected, please enter 'c' to continue or 'exit' to return to the main menu..."  -Path $LogFileName -Level Warn
+             
              }
+             }While(!(($Continue_LUNsVOLS -eq "c") -or ($Continue_LUNsVOLS -eq "exit") ))
    
-
-
-
 foreach($H in $Global:config.Hosts.GetEnumerator()){
  
 $HostName = $H.Value.Name
@@ -1765,7 +1822,7 @@ Get-VMHostStorage -VMHost $HostName -Refresh -RescanAllHba | Out-Null
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
  }
-#Logging hass been added to all commands
+ 
 Function Create-RDMLun2{
 
 # $Global:PathNameFiles is an array
@@ -1778,6 +1835,30 @@ $LogFileName = $Global:PathNameFiles[1]
 $LunIDReport = Get-LunID
 $LunID = [int]$Global:config.Other.LunID
 $LunID = $LunID + 1
+
+<#
+foreach($vdbenchVMs in $Global:config.VMs.GetEnumerator()){
+    #Shutting down VMs...
+    $VM = $vdbenchVMs.Value.Name
+    $VMObject = Get-VM $VM -ErrorVariable +Err -ErrorAction SilentlyContinue 
+    
+    if($VMObject.Guest.State -eq "Running"){
+    
+    Write-Log "Shuting down $VM to add RMDs and SCSI Controllers....." -Path $LogFileName -Level Info
+    Shutdown-VMGuest -VM $VMObject -Confirm:$false -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+    
+    }else{ 
+    
+    Write-Log "Stopping $VM to add RMDs and SCSI Controllers....." -Path $LogFileName -Level Info
+    Stop-VM -VM $VMObject -Confirm:$false -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
+   
+    }
+
+}
+
+Start-Sleep 60
+#>
+
 foreach($vdbenchVMs in $Global:config.VMs.GetEnumerator()){
 
     $VM = $vdbenchVMs.Value.Name
@@ -1806,10 +1887,10 @@ foreach($vdbenchVMs in $Global:config.VMs.GetEnumerator()){
 
 
 foreach($vdbenchVMs in $Global:config.VMs.GetEnumerator()){
-    #Rebooting VMs...
+    #ReStarting VMs...
     $VM = $vdbenchVMs.Value.Name
     $VMObject = Get-VM $VM -ErrorVariable +Err -ErrorAction SilentlyContinue 
-    Write-Log "Rebooting in $VM....." -Path $LogFileName -Level Info 
+    Write-Log "Starting $VM....." -Path $LogFileName -Level Info 
     Restart-VM -VM $VMObject -Confirm:$false -ErrorVariable +Err -ErrorAction SilentlyContinue | Out-Null
 }
 
@@ -1831,7 +1912,7 @@ foreach($vdbenchVMs in $Global:config.VMs.GetEnumerator()){
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-#Logging hass been added to all commands
+ 
 Function Import-Specsvdbench2($SVM_Prefix) {
 
 # $Global:PathNameFiles is an array
@@ -1873,7 +1954,7 @@ $OScustomizationSpec | %{ Write-Log -Message $_.Spec.Name -Message2 $_.IPAddress
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-#Logging hass been added to all commands
+ 
 Function Create-VMsvdbench2($SVM_Prefix) {
 
 # $Global:PathNameFiles is an array
@@ -1991,7 +2072,7 @@ if($SVM_Prefix -eq "FCP"){
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-#Logging hass been added to all commands
+ 
 Function Mounting-NFSVolumes2($VMName){
  
 # $Global:PathNameFiles is an array
@@ -2005,7 +2086,7 @@ $LogFileName = $Global:PathNameFiles[1]
 
  $SVM_NAME = $Global:config.SVM.Name+"_NFS"
 
- $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false } 
+ $DataAggr = $Global:DataAggr
  $NFSVolumes1 = Get-NcVol -Vserver $SVM_NAME -Name "$VMName*" -Aggregate $DataAggr[0]
  $NFSVolumes2 = Get-NcVol -Vserver $SVM_NAME -Name "$VMName*" -Aggregate $DataAggr[1]
  
@@ -2059,7 +2140,7 @@ $LogFileName = $Global:PathNameFiles[1]
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }  
          
  }
-#Logging hass been added to all commands
+ 
 Function Adding-DNS2{
 # $Global:PathNameFiles is an array
 # $Global:PathNameFiles[0] is the Configuratiton path.
@@ -2082,7 +2163,7 @@ $LogFileName = $Global:PathNameFiles[1]
 #Adding Error to Log File
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
  }
-#Logging hass been added to all commands
+ 
 Function Config-DNSVM2($SVM_Prefix){
 
 # $Global:PathNameFiles is an array
@@ -2121,7 +2202,7 @@ Start-Sleep 45
 #Adding Error to Log File
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 }
-#Logging hass been added to all commands
+ 
 Function Config-VMNFSFiles2{
 
 # $Global:PathNameFiles is an array
@@ -2158,7 +2239,7 @@ $mycreds = New-Object System.Management.Automation.PSCredential ("root", $secpas
 #Adding Error to Log File
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 }
-#Logging hass been added to all commands
+ 
 Function Shared-Files($SVM_Prefix, $CurrentPath){
 
 # $Global:PathNameFiles is an array
@@ -2172,7 +2253,7 @@ $SVM_NAME = $Global:config.SVM.Name+"_"+$SVM_Prefix
 
         $secpasswd = ConvertTo-SecureString "Netapp1!" -AsPlainText -Force
         $mycreds = New-Object System.Management.Automation.PSCredential ("root", $secpasswd)
-        $DataAggr = Get-NcAggr | ?{ $_.AggrRaidAttributes.HasLocalRoot -eq $false }
+        $DataAggr = $Global:DataAggr
         $NFSvol  = "SharedFiles"
         $JunctionPath = "/"+$NFSvol
         
@@ -2271,7 +2352,7 @@ $SVM_NAME = $Global:config.SVM.Name+"_"+$SVM_Prefix
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-#Logging hass been added to all commands
+ 
 Function vdbench-Files2($SVM_Prefix){
  
         # $Global:PathNameFiles is an array
@@ -2468,7 +2549,7 @@ if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.Posit
 
 Write-Log "Deployment has Finished......" -Path $LogFileName -Level Info
 }
-#Logging hass been added to all commands
+ 
 Function Remove-VMsDatatore($SVM_Prefix){
 
 $LogFileName = $Global:PathNameFiles[1]
@@ -2508,11 +2589,12 @@ Remove-OSCustomizationSpec -OSCustomizationSpec "$SVM_NAME*" -Confirm:$false | O
 }
        
    if($HostDataStores){
-
+        
+        do{
         Write-Log "Are you sure you want to Delete vdbench VMs and NFS Datastore:  "  -Path $LogFileName -Level Warn
-        $Creation = Read-Host "(No/yes)"
+        $Creation = Read-Host "(No/Yes)"
         Write-Log " " -Path $LogFileName -Level Info      
-        if($Creation -eq "yes"){
+        if($Creation -eq "Yes"){
                 #Removing all VMs                
                  ForEach($VM in $Global:config.VMs.GetEnumerator() | Sort Key){
                  $VMName = $VM.Value.Name
@@ -2590,11 +2672,16 @@ Remove-OSCustomizationSpec -OSCustomizationSpec "$SVM_NAME*" -Confirm:$false | O
 
                     }
                    
-            }else{
+            }elseif($Creation -eq "No"){
         
         Write-Log "The vdbench VMs and the NFS Datastore were not deleted"  -Path $LogFileName -Level Warn
         $continue = $true
+        }else{
+        
+        Write-Log "Incorrect option selected, please enter Yes or No..."  -Path $LogFileName -Level Warn
+        
         }
+        }While( !(($Creation -eq "No") -or ($Creation -eq "Yes") ))
 
         }else{
         
@@ -2605,7 +2692,7 @@ Remove-OSCustomizationSpec -OSCustomizationSpec "$SVM_NAME*" -Confirm:$false | O
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-#Logging hass been added to all commands
+ 
 Function Remove-ncVserverVD($SVM_Prefix) {
 
 $LogFileName = $Global:PathNameFiles[1]
@@ -2621,11 +2708,12 @@ if($ConnectionNetApp -eq "Stop"){
     Return "CancelDeletionSVM"
     Break
 }
-
-       Write-Log "Are you sure you want to Delete $SVM_NAME SVM with all volumes " -Path $LogFileName -Level Warn
-       $Creation = Read-Host "(No/yes)"
+        
+        do{
+        Write-Log "Are you sure you want to Delete $SVM_NAME SVM with all volumes " -Path $LogFileName -Level Warn
+        $Creation = Read-Host "(No/Yes)"
         Write-Log " " -Path $LogFileName -Level Info 
-        if($Creation -eq "yes"){
+        if($Creation -eq "Yes"){
          $Vservers = Get-NcVserver 
             if ($Vservers.Vserver -Notcontains "$SVM_NAME"){
                     Write-Log "There is no SVM under the name vdbench, please create it by going to the main Menu " -Path $LogFileName -Level Warn
@@ -2651,18 +2739,20 @@ if($ConnectionNetApp -eq "Stop"){
                 }
                 Remove-NcVserver -Name "$SVM_NAME" -Confirm:$false | Out-Null
                
-        }else{
+        }elseif($Creation -eq "No"){
         Write-Log "The SVM vdbench was not deleted" -Path $LogFileName -Level Warn
-       
         $continue = $true
-     }
+        }else{
+        Write-Log "Incorrect option selected, please enter Yes or No..."  -Path $LogFileName -Level Warn
+        }
+        }while(!(($Creation -eq "No") -or ($Creation -eq "Yes") ))
 
 #Adding Error to Log File
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 Clear-Host
       
 }
-#Logging hass been added to all commands
+ 
 Function PS-VersionCheck{
 
 $PSVersion = $PSversiontable.PSVersion
@@ -2679,7 +2769,7 @@ return $false
 
 
 }
-#Logging hass been added to all commands
+ 
 Function PowerCLI-VersionCheck{
 # $Global:PathNameFiles is an array
 # $Global:PathNameFiles[0] is the Configuratiton path.
@@ -2693,6 +2783,7 @@ $PowerCLIVersion = $PowerCLIVersion.Version
 if($PowerCLIVersion.Major -ge 6){
 
 return $true
+Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
 
 }else{
 
@@ -2704,7 +2795,7 @@ return $false
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-#Logging hass been added to all commands
+ 
 Function POSH-SHH-VersionCheck{
 
 $LogFileName = "PreChecks_Log.log"
@@ -2726,7 +2817,7 @@ return $false
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-#Logging hass been added to all commands
+ 
 Function PSNetAppToolKit-VersionCheck{
 
 $LogFileName = "PreChecks_Log.log"
@@ -2747,7 +2838,7 @@ return $false
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-#Logging hass been added to all commands
+ 
 Function VSwitch-Check($ESXiHost){
 
 # $Global:PathNameFiles is an array
@@ -2773,7 +2864,7 @@ return $false
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-#Logging hass been added to all commands
+ 
 Function Pre-Checks{
 
 $LogFileName = "PreChecks_Log.log"
@@ -2804,22 +2895,29 @@ $PSVersion = $PSversiontable.PSVersion
     Write-Log "Current version $PowerCLIVersion of PowerCLI is supported...." -Path $LogFileName -Level Info
     
     }else{
-    
-    Write-Log "Current version $PowerCLIVersion of PowerCLI is not supported or PowerCLI is not installed...." -Path $LogFileName -Level Error
-    $Install = Read-Host "Do you want to install the lastest version? yes/no "
-            if($Install -eq "yes"){
+            
+            do{
+            Write-Log "Current version $PowerCLIVersion of PowerCLI is not supported or PowerCLI is not installed...." -Path $LogFileName -Level Error
+            $Install = Read-Host "Do you want to install the lastest version? Yes/No "
+            if($Install -eq "Yes"){
     
             Install-Module -Name VMware.PowerCLI –Scope CurrentUser -Confirm:$false
             Import-Module -Name VMware.PowerCLI -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
             Set-PowerCLIConfiguration -Scope User -ParticipateInCEIP $false -Confirm:$false -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
-
-            }else{
+            Set-PowerCLIConfiguration -InvalidCertificateAction Ignore
+            
+            }elseif($Install -eq "No"){
             
             Write-Log "PowerCLI was not installed.... " -Path $LogFileName -Level Error
             [void][System.Console]::ReadKey($true)
             Exit
 
+            }else{
+            
+            Write-Log "Incorrect option selected, please enter Yes or No..."  -Path $LogFileName -Level Warn
+            
             }
+            }while(!(($Install -eq "No") -or ($Install -eq "Yes") ))
 
     }
 
@@ -2827,20 +2925,29 @@ $PSVersion = $PSversiontable.PSVersion
     $OntapDataVersion = Get-NaToolkitVersion -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
     Write-Log "Current version $PSSHHVersion of POSH-SSH is supported...." -Path $LogFileName -Level Info
     }else{
-    Write-Log "Current version $PSSHHVersion of POSH-SSH is not supported or POSH-SSH is not even installed...." -Path $LogFileName -Level Error
-    $Install = Read-Host "Do you want to install the lastest version? yes/no "
-            if($Install -eq "yes"){
+            
+            do{
+            Write-Log "Current version $PSSHHVersion of POSH-SSH is not supported or POSH-SSH is not even installed...." -Path $LogFileName -Level Error
+            $Install = Read-Host "Do you want to install the lastest version? Yes/No "
+            if($Install -eq "Yes"){
     
             Install-Module -Name Posh-SSH -Scope CurrentUser -Force -RequiredVersion 1.7.7 -Confirm:$false
             #Import Posh-SSH Module....
             Import-Module -Name Posh-SSH -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
 
-            }else{
+            }elseif($Install -eq "No"){
             
             Write-Log "POSH-SSH was not installed.... " -Path $LogFileName -Level Error
             [void][System.Console]::ReadKey($true)
             Exit
+
+            }else{
+            
+            Write-Log "Incorrect option selected, please enter Yes or No..."  -Path $LogFileName -Level Warn
+            
             }
+
+            }While(!(($Creation -eq "No") -or ($Creation -eq "Yes") ))
 
     }
 
@@ -2861,7 +2968,7 @@ $PSVersion = $PSversiontable.PSVersion
 if($Error) { $Error | %{ Write-Log -Message $_ -Message2 $_.InvocationInfo.PositionMessage -Path $LogFilename -Level Error } }
 
 }
-#Logging hass been added to all commands
+ 
 Function GenerateConfigFile{
 
 $RawXAML  = @"
